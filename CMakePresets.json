@@ -1,0 +1,64 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Dev (Debug, tests on)",
+      "description": "Day-to-day development build: Debug, all warnings, tests enabled.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "HB_BUILD_TESTS": "ON",
+        "HB_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "asan",
+      "displayName": "ASan+UBSan (Debug)",
+      "description": "Debug build with AddressSanitizer and UndefinedBehaviorSanitizer.",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build-asan",
+      "cacheVariables": {
+        "HB_ENABLE_ASAN": "ON",
+        "HB_ENABLE_UBSAN": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Optimized build for benchmarking and packaging.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "HB_BUILD_TESTS": "ON",
+        "HB_BUILD_BENCHMARKS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev", "configurePreset": "dev" },
+    { "name": "asan", "configurePreset": "asan" },
+    { "name": "release", "configurePreset": "release" }
+  ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error", "stopOnFailure": false }
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

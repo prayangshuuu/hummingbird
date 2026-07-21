@@ -1,0 +1,28 @@
+name: format
+
+# Style gate: verifies every tracked C source/header matches .clang-format.
+# Fast and platform-independent — runs on Linux only.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+
+      - name: Check formatting
+        run: |
+          # Every C source and header under the first-party trees.
+          files=$(git ls-files '*.c' '*.h' \
+            ':!:third_party/*' ':!:colibri/*')
+          if [ -z "$files" ]; then
+            echo "no C sources to check"; exit 0
+          fi
+          clang-format --dry-run --Werror $files

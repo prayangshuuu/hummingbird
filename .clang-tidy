@@ -1,0 +1,40 @@
+# Hummingbird static-analysis policy.
+# Run: clang-tidy -p build <file>  (or scripts/lint.sh). CI runs this on changed files.
+#
+# Philosophy: the compiler flags in cmake/modules/HBCompilerOptions.cmake are the
+# first gate (warnings-as-errors). clang-tidy adds bug-pattern and portability
+# checks on top. We keep the set focused so signal stays high on a C17 codebase.
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  misc-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-avoid-const-params-in-decls,
+  -bugprone-easily-swappable-parameters,
+  -misc-no-recursion,
+  -cert-dcl03-c,
+  -cert-err33-c
+
+# Treat nothing as auto-fatal here; CI decides which become errors. Keep the
+# codebase clang-tidy-clean so this can be tightened to WarningsAsErrors later.
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*/(src|include|backends|frontends|tools)/.*'
+FormatStyle: file
+
+CheckOptions:
+  - key:   readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key:   readability-identifier-naming.VariableCase
+    value: lower_case
+  - key:   readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key:   readability-identifier-naming.EnumConstantCase
+    value: UPPER_CASE
+  - key:   readability-identifier-naming.StructCase
+    value: lower_case

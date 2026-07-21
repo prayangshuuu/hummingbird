@@ -1,0 +1,6 @@
+{
+  "ignorePatterns": [
+    { "pattern": "^https://github.com/your-org/" }
+  ],
+  "aliveStatusCodes": [200, 206, 429]
+}

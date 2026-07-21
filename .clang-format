@@ -1,0 +1,41 @@
+# Hummingbird C17 formatting rules.
+# Applies to src/, include/, backends/, frontends/, tools/, tests/, examples/.
+# Run: clang-format -i <files>  (or `scripts/format.sh`). CI enforces this.
+---
+Language:        Cpp        # clang-format's name for C/C++/ObjC
+BasedOnStyle:    LLVM
+Standard:        c++17       # tokenizer only; the project is C17
+
+# Indentation
+IndentWidth:     4
+TabWidth:        4
+UseTab:          Never
+ContinuationIndentWidth: 4
+IndentCaseLabels: false
+IndentPPDirectives: None
+
+# Line length — matches the 100-col wrap used throughout the sources.
+ColumnLimit:     100
+
+# Braces / spacing
+BreakBeforeBraces: Attach
+SpaceBeforeParens: ControlStatements
+PointerAlignment: Right       # `int *p`, matches the codebase
+AlignAfterOpenBracket: Align
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AlwaysBreakAfterReturnType: None
+
+# Includes — keep module-grouped, do not let the formatter reorder across groups
+# (order encodes the dependency direction). Sorting within a group is fine.
+SortIncludes:    CaseSensitive
+IncludeBlocks:   Preserve
+
+# Misc
+
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+SpacesBeforeTrailingComments: 1
+AlignTrailingComments: true

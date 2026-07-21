@@ -1,0 +1,39 @@
+# EditorConfig — https://editorconfig.org
+# Baseline whitespace rules for every editor. Language-specific formatting for
+# C lives in .clang-format; this file just keeps the basics consistent.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# C / headers / GPU backend dialects
+[*.{c,h,cu,cuh,m,mm}]
+indent_size = 4
+max_line_length = 100
+
+# Build system
+[CMakeLists.txt]
+indent_size = 4
+[*.cmake]
+indent_size = 4
+
+# Data / docs / scripts
+[*.{yml,yaml,json}]
+indent_size = 2
+[*.md]
+trim_trailing_whitespace = false   # two trailing spaces = hard line break
+[*.{sh,bash}]
+indent_size = 2
+
+# Windows batch files require CRLF
+[*.{bat,cmd}]
+end_of_line = crlf
+
+# Makefiles require real tabs
+[Makefile]
+indent_style = tab
