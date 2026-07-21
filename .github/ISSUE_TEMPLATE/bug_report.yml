@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a defect in Hummingbird (crash, wrong output, build failure).
+title: "[bug]: "
+labels: ["type: bug", "status: needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Correctness is the project's first priority
+        (see `.claude/PROJECT_CONTEXT.md` §12), so please be precise about what
+        you expected versus what happened.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I can reproduce this on the latest `main`.
+          required: false
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `hb --version` or the git commit SHA.
+      placeholder: "0.0.0 / abc1234"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (describe below)
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      options:
+        - CPU
+        - CUDA
+        - Metal
+        - Other/unsure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you observe? Include exact error text and, if relevant, a token-level diff against the oracle.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands, config, and model (or a minimal substitute). A failing test is the gold standard.
+      render: shell
+    validations:
+      required: true

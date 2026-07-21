@@ -1,0 +1,28 @@
+﻿name: docs
+
+# Documentation checks. Validates that relative Markdown links resolve.
+# When API doc generation (Doxygen) is wired up in a later milestone, its build
+# is added here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - '**/*.md'
+      - '.github/workflows/docs.yml'
+
+jobs:
+  markdown-link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check relative Markdown links
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          check-modified-files-only: 'yes'
+          config-file: '.github/markdown-link-check.json'
+          base-branch: 'main'
+

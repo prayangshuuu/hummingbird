@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea (Discussions)
+    url: https://github.com/your-org/hummingbird/discussions
+    about: Ask usage questions, propose ideas, or discuss design before opening an issue.
+  - name: Security vulnerability
+    url: https://github.com/your-org/hummingbird/security/advisories/new
+    about: Report a vulnerability privately. Do NOT open a public issue — see SECURITY.md.

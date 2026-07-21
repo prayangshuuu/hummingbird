@@ -1,0 +1,56 @@
+name: Feature request
+description: Propose new functionality or an enhancement.
+title: "[feat]: "
+labels: ["type: feature", "status: needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hummingbird favors a small, sharp core with extension points (backends,
+        model adapters, quant formats, samplers). Before proposing a core change,
+        consider whether it fits an existing extension point (see
+        `docs/architecture/`).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that you can't today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Core runtime
+        - Memory / streaming / cache
+        - Scheduler
+        - Tensor / kernels
+        - Backend (CPU/CUDA/Metal/...)
+        - Model adapter
+        - Quantization
+        - Tokenizer
+        - CLI / server
+        - Build / CI / tooling
+        - Docs
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This does not turn Hummingbird into a training framework or general autodiff engine (a non-goal).
+          required: true
+        - label: This does not degrade output fidelity by default (placement ≠ precision).
+          required: true

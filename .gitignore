@@ -1,0 +1,71 @@
+# ── Build output ────────────────────────────────────────────────────────────
+/build/
+/build-*/
+/out/
+/install/
+cmake-build-*/
+CMakeUserPresets.json
+
+# ── CMake / Ninja / Make cruft (if generated in-tree by mistake) ─────────────
+CMakeCache.txt
+CMakeFiles/
+*.cmake.stamp
+compile_commands.json
+.ninja_deps
+.ninja_log
+
+# ── Compiled objects / libs / binaries ───────────────────────────────────────
+*.o
+*.obj
+*.lo
+*.slo
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+
+# ── Test / coverage / profiling artifacts ────────────────────────────────────
+Testing/
+*.gcda
+*.gcno
+*.gcov
+/coverage/
+*.profraw
+*.profdata
+
+# ── Editor / IDE ─────────────────────────────────────────────────────────────
+.vscode/
+.vs/
+.idea/
+*.swp
+*~
+
+# ── OS cruft ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Local agent state (never commit) ─────────────────────────────────────────
+.claude/
+
+# ── Internal docs (kept local, not published) ────────────────────────────────
+docs/architecture/
+
+# ── Runtime logs / scratch ────────────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
+
+# ── Large model artifacts (never commit weights) ─────────────────────────────
+*.safetensors
+*.hbm
+*.gguf
+*.bin
+*.onnx
+*.pt
+*.ckpt

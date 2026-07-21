@@ -1,0 +1,17 @@
+# Ownership map. GitHub requests reviews from the owning party when matching
+# files change. Tighten as the team grows; today the maintainer owns everything.
+
+# Default owner for anything not matched below.
+*                       @your-org/maintainers
+
+# The source of truth and architecture docs get extra scrutiny.
+/.claude/PROJECT_CONTEXT.md   @your-org/maintainers
+/docs/architecture/          @your-org/maintainers
+
+# Build system and CI.
+/CMakeLists.txt         @your-org/maintainers
+/cmake/                 @your-org/maintainers
+/.github/               @your-org/maintainers
+
+# The public ABI — never changes without a maintainer + an ADR.
+/include/               @your-org/maintainers
