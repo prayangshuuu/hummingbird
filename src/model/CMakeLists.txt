@@ -1,11 +1,16 @@
-# hb_model — Model adapter: descriptor + forward graph + tokenizer ref + quant classes. New models are additive.
-add_library(hb_model STATIC model.c)
+# hb_model — Model Loader Framework: format-independent loading pipeline,
+# tensor manifest, metadata validation, and streaming integration (RFC-011).
+add_library(hb_model STATIC
+    model.c
+    model_format_gguf.c
+    model_format_safetensors.c
+)
 add_library(hummingbird::model ALIAS hb_model)
 
 target_include_directories(hb_model
     PUBLIC "${HB_SRC_DIR}" "${HB_INCLUDE_DIR}")
 
-target_link_libraries(hb_model PUBLIC hb_common hb_quant hb_graph hb_tokenizer)
+target_link_libraries(hb_model PUBLIC hb_common hb_memory hb_tensor hb_platform hb_quant hb_graph hb_tokenizer)
 
 hb_apply_common(hb_model)
 

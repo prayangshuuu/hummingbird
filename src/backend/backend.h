@@ -36,11 +36,11 @@ typedef struct hbi_backend_context hbi_backend_context;
 
 /* Data type support bitmask (simplified for the interface) */
 typedef enum hbi_datatype_flags {
-    HBI_DTYPE_F32 = (1 << 0),
-    HBI_DTYPE_F16 = (1 << 1),
-    HBI_DTYPE_BF16 = (1 << 2),
-    HBI_DTYPE_I8 = (1 << 3),
-    HBI_DTYPE_I4 = (1 << 4)
+    HBI_BACKEND_DTYPE_F32 = (1 << 0),
+    HBI_BACKEND_DTYPE_F16 = (1 << 1),
+    HBI_BACKEND_DTYPE_BF16 = (1 << 2),
+    HBI_BACKEND_DTYPE_I8 = (1 << 3),
+    HBI_BACKEND_DTYPE_I4 = (1 << 4)
 } hbi_datatype_flags;
 
 typedef struct hbi_backend_capabilities {
@@ -73,6 +73,7 @@ typedef struct hbi_backend_command {
         /* HBI_CMD_KERNEL_DISPATCH */
         struct {
             const void *kernel_descriptor; /* Typed operation */
+            const void *kernel_params;     /* Opaque parameters for the kernel */
             const void **inputs;           /* Array of input tensors */
             uint32_t num_inputs;
             void **outputs; /* Array of output tensors */
