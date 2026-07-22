@@ -5,7 +5,7 @@ add_library(hummingbird::executor ALIAS hb_executor)
 target_include_directories(hb_executor
     PUBLIC "${HB_SRC_DIR}" "${HB_INCLUDE_DIR}")
 
-target_link_libraries(hb_executor PUBLIC hb_common hb_graph hb_tensor hb_backend hb_kv hb_memory)
+target_link_libraries(hb_executor PUBLIC hb_common hb_graph hb_tensor hb_backend hb_kv hb_memory hb_kernel hb_profiler hb_platform)
 
 hb_apply_common(hb_executor)
 

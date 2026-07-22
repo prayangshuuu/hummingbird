@@ -5,7 +5,7 @@ add_library(hummingbird::graph ALIAS hb_graph)
 target_include_directories(hb_graph
     PUBLIC "${HB_SRC_DIR}" "${HB_INCLUDE_DIR}")
 
-target_link_libraries(hb_graph PUBLIC hb_common hb_tensor)
+target_link_libraries(hb_graph PUBLIC hb_common hb_tensor hb_platform hb_kernel)
 
 hb_apply_common(hb_graph)
 
