@@ -24,6 +24,58 @@ Hummingbird shifts the problem from fitting the model to **placing the model acr
 
 The design lets a machine with a modest amount of RAM run a model whose total size dwarfs that RAM, and it does so in portable C with no third-party runtime dependencies.
 
+## Getting Started
+
+You need a C17 compiler (GCC, Clang, or MSVC) and CMake version 3.20+. There are no third-party runtime dependencies (no BLAS, no Python).
+
+```sh
+# Clone the repository
+git clone https://github.com/prayangshuuu/hummingbird.git
+cd hummingbird
+
+# Configure and build
+cmake --preset dev
+cmake --build --preset dev
+
+# Run the test suite
+ctest --preset dev
+```
+
+Run the scaffold binaries to confirm everything links and executes:
+
+```sh
+./build/frontends/cli/hb --version
+./build/examples/example_version
+```
+
+## Usage & How to Run
+
+Once the frontends are built, you can use the `hb` CLI for inference and serving (note: inference is currently in development).
+
+```sh
+# One-shot text generation
+./build/frontends/cli/hb run --model /path/to/model.hbm --prompt "Hello world"
+
+# Interactive chat mode
+./build/frontends/cli/hb chat --model /path/to/model.hbm
+
+# Start an OpenAI-compatible HTTP server
+./build/frontends/cli/hb serve --model /path/to/model.hbm --port 8080
+```
+
+## Build Options
+
+You can customize the engine by passing options to CMake (`-D<option>=ON`):
+
+| Option | Default | Description |
+|--------|:-------:|-------------|
+| `HB_BUILD_TESTS` | ON | Build unit and integration tests. |
+| `HB_BUILD_FRONTENDS` | ON | Build the `hb` CLI and `hb-server`. |
+| `HB_BUILD_TOOLS` | ON | Build offline tooling (converters/oracles). |
+| `HB_BACKEND_CPU` | ON | The reference CPU backend (correctness baseline). |
+| `HB_BACKEND_CUDA` | OFF | Enable the CUDA backend accelerator. |
+| `HB_BACKEND_METAL`| OFF | Enable the Apple Silicon Metal accelerator. |
+
 ## Architecture
 
 The engine is organized in strict layers, allowing it to scale from small devices to large accelerators seamlessly.
@@ -92,57 +144,6 @@ flowchart LR
 * **GPU Backend Interface**: Unified abstractions for loading `.so/.dll` for CUDA and Metal at runtime.
 * **Dynamic Batching**: Server-grade continuous batching for maximum throughput.
 * **Streaming Engine**: Coalesced I/O via `io_uring` and memory-mapped IO.
-
-## Getting Started
-
-You need a C17 compiler (GCC, Clang, or MSVC) and CMake version 3.20+. There are no third-party runtime dependencies (no BLAS, no Python).
-
-```sh
-# Clone the repository
-git clone https://github.com/prayangshuuu/hummingbird.git
-cd hummingbird
-
-# Configure and build
-cmake --preset dev
-cmake --build --preset dev
-
-# Run the test suite
-ctest --preset dev
-```
-
-Run the scaffold binaries to confirm everything links and executes:
-
-```sh
-./build/frontends/cli/hb --version
-./build/examples/example_version
-```
-## Usage & How to Run
-
-Once the frontends are built, you can use the `hb` CLI for inference and serving (note: inference is currently in development).
-
-```sh
-# One-shot text generation
-./build/frontends/cli/hb run --model /path/to/model.hbm --prompt "Hello world"
-
-# Interactive chat mode
-./build/frontends/cli/hb chat --model /path/to/model.hbm
-
-# Start an OpenAI-compatible HTTP server
-./build/frontends/cli/hb serve --model /path/to/model.hbm --port 8080
-```
-
-## Build Options
-
-You can customize the engine by passing options to CMake (`-D<option>=ON`):
-
-| Option | Default | Description |
-|--------|:-------:|-------------|
-| `HB_BUILD_TESTS` | ON | Build unit and integration tests. |
-| `HB_BUILD_FRONTENDS` | ON | Build the `hb` CLI and `hb-server`. |
-| `HB_BUILD_TOOLS` | ON | Build offline tooling (converters/oracles). |
-| `HB_BACKEND_CPU` | ON | The reference CPU backend (correctness baseline). |
-| `HB_BACKEND_CUDA` | OFF | Enable the CUDA backend accelerator. |
-| `HB_BACKEND_METAL`| OFF | Enable the Apple Silicon Metal accelerator. |
 
 ## Embedding Hummingbird
 
