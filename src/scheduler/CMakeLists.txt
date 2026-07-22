@@ -5,7 +5,7 @@ add_library(hummingbird::scheduler ALIAS hb_scheduler)
 target_include_directories(hb_scheduler
     PUBLIC "${HB_SRC_DIR}" "${HB_INCLUDE_DIR}")
 
-target_link_libraries(hb_scheduler PUBLIC hb_common hb_memory hb_stream hb_backend)
+target_link_libraries(hb_scheduler PUBLIC hb_common hb_memory hb_stream hb_backend hb_graph hb_device)
 
 hb_apply_common(hb_scheduler)
 
