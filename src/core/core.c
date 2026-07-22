@@ -90,7 +90,14 @@ hbi_status hbi_core_create(hbi_core **out, const hbi_core_config *cfg_in) {
     hbi_log_set_level(cfg.log_level);
 
     /* 4. Device report (never fails for a non-NULL out). */
-    (void)hbi_device_query(&core->device);
+    hbi_device_manager *mgr = NULL;
+    if (hbi_device_manager_create(&mgr) == HBI_OK) {
+        const hbi_device *dev = hbi_device_manager_get_best(mgr);
+        if (dev) {
+            hbi_device_get_info(dev, &core->device);
+        }
+        hbi_device_manager_destroy(mgr);
+    }
 
     /* 5. Profiler (optional). */
     if (cfg.enable_profiling) {

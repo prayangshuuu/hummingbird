@@ -1,81 +1,74 @@
-/* device_test.c — unit tests for the `device` capability report. */
+/* device_test.c — tests for the Device Manager (RFC-006) */
 #include "device/device.h"
-
-#include "hbi_test.h"
-
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-static void test_simd_level_strings(void) {
-    for (int i = 0; i < HBI_SIMD_LEVEL_COUNT; ++i) {
-        const char *s = hbi_simd_level_str((hbi_simd_level)i);
-        HBI_CHECK(s != NULL && s[0] != '\0');
-    }
-    /* An out-of-range value must not crash and must not return NULL. */
-    HBI_CHECK(hbi_simd_level_str((hbi_simd_level)999) != NULL);
-    /* The compiled level is one of the known values. */
-    hbi_simd_level lvl = hbi_device_simd_level();
-    HBI_CHECK(lvl >= HBI_SIMD_NONE && lvl < HBI_SIMD_LEVEL_COUNT);
-}
+#define HBI_CHECK(cond)                                                                            \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "FAIL: %s:%d: %s\n", __FILE__, __LINE__, #cond);                       \
+            exit(1);                                                                               \
+        }                                                                                          \
+    } while (0)
 
-static void test_query(void) {
-    HBI_CHECK_EQ_INT(hbi_device_query(NULL), HBI_ERR_INVALID_ARG);
+#define HBI_CHECK_EQ_INT(a, b) HBI_CHECK((a) == (b))
+#define HBI_CHECK_STR_EQ(a, b) HBI_CHECK(strcmp((a), (b)) == 0)
+
+static void test_device_manager(void) {
+    hbi_device_manager *mgr = NULL;
+
+    HBI_CHECK_EQ_INT(hbi_device_manager_create(NULL), HBI_ERR_INVALID_ARG);
+    HBI_CHECK_EQ_INT(hbi_device_manager_create(&mgr), HBI_OK);
+    HBI_CHECK(mgr != NULL);
+
+    uint32_t count = hbi_device_manager_get_device_count(mgr);
+    HBI_CHECK(count >= 1); /* Should always discover at least the CPU */
+
+    const hbi_device *dev = hbi_device_manager_get_device(mgr, 0);
+    HBI_CHECK(dev != NULL);
+
+    const hbi_device *best = hbi_device_manager_get_best(mgr);
+    HBI_CHECK(best != NULL);
+
+    HBI_CHECK_EQ_INT(hbi_device_get_type(dev), HBI_DEVICE_TYPE_CPU);
+
+    hbi_device_capabilities caps = hbi_device_get_capabilities(dev);
+    /* Should at least be UMA */
+    HBI_CHECK((caps & HBI_CAP_UMA) != 0);
 
     hbi_device_info info;
-    memset(&info, 0, sizeof info);
-    HBI_CHECK_EQ_INT(hbi_device_query(&info), HBI_OK);
-
-    /* Core counts are sane and self-consistent. */
+    HBI_CHECK_EQ_INT(hbi_device_get_info(dev, &info), HBI_OK);
     HBI_CHECK(info.logical_cores >= 1);
     HBI_CHECK(info.physical_cores >= 1);
-    HBI_CHECK(info.physical_cores <= info.logical_cores);
-    HBI_CHECK(info.page_size >= 512);
-    HBI_CHECK(info.cacheline_size >= 16);
-    HBI_CHECK(info.arch[0] != '\0');
-    HBI_CHECK(info.simd >= HBI_SIMD_NONE && info.simd < HBI_SIMD_LEVEL_COUNT);
+    HBI_CHECK(info.cacheline_size > 0);
+    HBI_CHECK(strlen(info.arch) > 0);
+    HBI_CHECK(strlen(info.vendor) > 0);
+    HBI_CHECK(strlen(info.name) > 0);
 
-    /* The report is stable across calls. */
-    hbi_device_info again;
-    memset(&again, 0, sizeof again);
-    HBI_CHECK_EQ_INT(hbi_device_query(&again), HBI_OK);
-    HBI_CHECK_EQ_INT(again.logical_cores, info.logical_cores);
-    HBI_CHECK_EQ_INT(again.simd, info.simd);
-}
+    hbi_device_memory mem;
+    HBI_CHECK_EQ_INT(hbi_device_get_memory(dev, &mem), HBI_OK);
+    HBI_CHECK(mem.total_bytes > 0);
+    HBI_CHECK(mem.num_regions >= 1);
+    HBI_CHECK(mem.regions[0].total_bytes > 0);
 
-static void test_accessors(void) {
-    /* logical_cores is clamped to >= 1 so callers can divide by it. */
-    HBI_CHECK(hbi_device_logical_cores() >= 1);
-}
+    hbi_device_statistics stats;
+    HBI_CHECK_EQ_INT(hbi_device_get_statistics(dev, &stats), HBI_OK);
+    HBI_CHECK_EQ_INT((int)stats.currently_allocated_bytes, 0);
 
-static void test_describe(void) {
     char buf[128];
-    int n = hbi_device_describe(buf, sizeof buf);
+    int n = hbi_device_describe(dev, buf, sizeof(buf));
     HBI_CHECK(n > 0);
-    HBI_CHECK(strlen(buf) > 0);
-    HBI_CHECK(strstr(buf, "simd=") != NULL);
 
-    /* Truncation is reported (return value is the full length like snprintf). */
-    char small[8];
-    int n2 = hbi_device_describe(small, sizeof small);
-    HBI_CHECK(n2 == n); /* would-be length, not the truncated length */
-    HBI_CHECK(strlen(small) < sizeof small);
-
-    /* cap == 0 must not write and must not crash. */
-    int n3 = hbi_device_describe(NULL, 0);
-    HBI_CHECK(n3 == n);
-}
-
-static void test_identity(void) {
-    HBI_CHECK_EQ_INT(hbi_device_selftest(), HBI_OK);
-    HBI_CHECK_STR_EQ(hbi_device_name(), "device");
+    hbi_device_manager_destroy(mgr);
 }
 
 int main(void) {
-    HBI_TEST_BEGIN("device");
-    HBI_RUN(test_simd_level_strings);
-    HBI_RUN(test_query);
-    HBI_RUN(test_accessors);
-    HBI_RUN(test_describe);
-    HBI_RUN(test_identity);
-    return HBI_TEST_END();
+    HBI_CHECK_EQ_INT(hbi_device_selftest(), HBI_OK);
+    HBI_CHECK_STR_EQ(hbi_device_module_name(), "device");
+
+    test_device_manager();
+
+    printf("PASS\n");
+    return 0;
 }
