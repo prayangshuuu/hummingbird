@@ -116,7 +116,53 @@ Run the scaffold binaries to confirm everything links and executes:
 ./build/frontends/cli/hb --version
 ./build/examples/example_version
 ```
+## Usage & How to Run
 
+Once the frontends are built, you can use the `hb` CLI for inference and serving (note: inference is currently in development).
+
+```sh
+# One-shot text generation
+./build/frontends/cli/hb run --model /path/to/model.hbm --prompt "Hello world"
+
+# Interactive chat mode
+./build/frontends/cli/hb chat --model /path/to/model.hbm
+
+# Start an OpenAI-compatible HTTP server
+./build/frontends/cli/hb serve --model /path/to/model.hbm --port 8080
+```
+
+## Build Options
+
+You can customize the engine by passing options to CMake (`-D<option>=ON`):
+
+| Option | Default | Description |
+|--------|:-------:|-------------|
+| `HB_BUILD_TESTS` | ON | Build unit and integration tests. |
+| `HB_BUILD_FRONTENDS` | ON | Build the `hb` CLI and `hb-server`. |
+| `HB_BUILD_TOOLS` | ON | Build offline tooling (converters/oracles). |
+| `HB_BACKEND_CPU` | ON | The reference CPU backend (correctness baseline). |
+| `HB_BACKEND_CUDA` | OFF | Enable the CUDA backend accelerator. |
+| `HB_BACKEND_METAL`| OFF | Enable the Apple Silicon Metal accelerator. |
+
+## Embedding Hummingbird
+
+Because the engine is a library with a stable C ABI, you can easily embed it directly into another application.
+
+```c
+#include <hummingbird/hummingbird.h>
+#include <stdio.h>
+
+int main(void) {
+    /* Query the runtime version of the library */
+    printf("hummingbird %s\n", hb_version_string());
+
+    /* Status codes turn into stable, human-readable strings */
+    hb_status st = HB_ERR_NOT_IMPLEMENTED;
+    printf("Status: %s\n", hb_status_string(st));
+
+    return 0;
+}
+```
 ## License
 
 Hummingbird is released under the [Apache License, Version 2.0](LICENSE).
