@@ -5,6 +5,7 @@
  */
 #include "executor/executor.h"
 #include "graph/graph.h"
+#include "planner/planner.h"
 #include "platform/platform.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,7 +72,13 @@ int main(void) {
     CHECK(hbi_tensor_alloc(&in_t, HBI_DTYPE_FP32, &s));
     CHECK(hbi_exec_context_bind(ctx, in_id, &in_t));
 
-    CHECK(hbi_exec_context_allocate_internals(ctx));
+    hbi_memory_planner *planner = NULL;
+    CHECK(hbi_memory_planner_create(g, &planner));
+
+    hbi_memory_plan *plan = NULL;
+    CHECK(hbi_memory_planner_plan(planner, &plan));
+
+    CHECK(hbi_exec_context_allocate_internals(ctx, plan));
 
     /* Warmup */
     CHECK(hbi_executor_run(ex, ctx));
@@ -89,6 +96,7 @@ int main(void) {
     hbi_tensor_destroy(&in_t);
     hbi_exec_context_destroy(ctx);
     hbi_executor_destroy(ex);
+    hbi_memory_planner_destroy(planner);
     hbi_graph_destroy(g);
 
     return 0;

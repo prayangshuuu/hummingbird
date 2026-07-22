@@ -17,6 +17,11 @@ add_executable(bench_noop bench_noop.c)
 target_link_libraries(bench_noop PRIVATE hummingbird::hummingbird)
 hb_apply_common(bench_noop)
 
+# Memory Planner baselines (RFC-005)
+add_executable(bench_planner bench_planner.c)
+target_link_libraries(bench_planner PRIVATE hummingbird::hummingbird)
+hb_apply_common(bench_planner)
+
 # Internal micro-benchmarks (foundation primitives, no public ABI).
 add_executable(bench_alloc bench_alloc.c)
 target_link_libraries(bench_alloc PRIVATE hb_memory hb_platform hb_common)

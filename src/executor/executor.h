@@ -11,6 +11,7 @@
 #include "graph/graph.h"
 #include "kernel/kernel.h"
 #include "memory/memory.h"
+#include "planner/planner.h"
 #include "tensor/tensor.h"
 
 #ifdef __cplusplus
@@ -32,9 +33,10 @@ hbi_status hbi_exec_context_create(const hbi_graph *graph, hbi_allocator *alloca
  * and must outlive the context. */
 hbi_status hbi_exec_context_bind(hbi_exec_context *ctx, uint32_t value_id, hbi_tensor *tensor);
 
-/* Allocate all unbound intermediate tensors in the context using its allocator.
+/* Allocate all unbound intermediate tensors in the context using its allocator,
+ * guided by the provided memory plan (which manages buffer aliasing).
  * This should be called after binding inputs and constants. */
-hbi_status hbi_exec_context_allocate_internals(hbi_exec_context *ctx);
+hbi_status hbi_exec_context_allocate_internals(hbi_exec_context *ctx, const hbi_memory_plan *plan);
 
 /* Destroy the context and free any tensors it allocated (but not borrowed ones). */
 void hbi_exec_context_destroy(hbi_exec_context *ctx);
