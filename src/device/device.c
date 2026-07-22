@@ -1,143 +1,248 @@
-/* device.c — host capability report, built on the platform shim.
+/* device.c — Device discovery and hardware abstraction layer (RFC-006)
  *
- * All OS access goes through hbi_cpu_query (platform, layer 1); this module only
- * interprets the numbers and adds the compile-time SIMD level. The report is
- * computed once and cached; recomputation is idempotent, so the lazy init is
- * race-tolerant (worst case two threads compute the same values into the same
- * fields before the ready flag is observed).
+ * Implements the Device Manager registry and CPU device discovery using
+ * the underlying OS platform shim.
  */
 #include "device/device_internal.h"
-
 #include "platform/platform.h"
 
-#include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
 
-/* ── Compile-time SIMD level ─────────────────────────────────────────────────
- * Determined purely from predefined compiler macros: what the binary may
- * legally execute. Runtime CPU-feature dispatch is a separate, later concern. */
-static hbi_simd_level detect_compiled_simd(void) {
+/* ── Compile-time SIMD level capabilities ──────────────────────────────────────
+ * Detected purely from predefined compiler macros to represent what the binary
+ * may legally execute. */
+static hbi_device_capabilities detect_compiled_simd(void) {
+    hbi_device_capabilities caps = HBI_CAP_NONE;
 #if defined(__AVX512F__)
-    return HBI_SIMD_AVX512;
+    caps |= (HBI_CAP_SSE2 | HBI_CAP_AVX2 | HBI_CAP_AVX512);
 #elif defined(__AVX2__)
-    return HBI_SIMD_AVX2;
+    caps |= (HBI_CAP_SSE2 | HBI_CAP_AVX2);
 #elif defined(__SSE2__) || (defined(_M_X64)) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
-    return HBI_SIMD_SSE2;
-#elif defined(__ARM_NEON) || defined(__aarch64__) || defined(_M_ARM64)
-    return HBI_SIMD_NEON;
-#else
-    return HBI_SIMD_NONE;
+    caps |= HBI_CAP_SSE2;
 #endif
+
+#if defined(__ARM_NEON) || defined(__aarch64__) || defined(_M_ARM64)
+    caps |= HBI_CAP_NEON;
+#endif
+
+#if defined(__ARM_FEATURE_SVE)
+    caps |= HBI_CAP_SVE;
+#endif
+
+#if defined(__F16C__)
+    caps |= HBI_CAP_F16C;
+#endif
+
+#if defined(__AVX512BF16__)
+    caps |= HBI_CAP_BF16;
+#endif
+
+#if defined(__AVX512VNNI__)
+    caps |= HBI_CAP_VNNI;
+#endif
+
+    return caps;
 }
 
-const char *hbi_simd_level_str(hbi_simd_level level) {
-    switch (level) {
-    case HBI_SIMD_NONE:
-        return "none";
-    case HBI_SIMD_SSE2:
-        return "sse2";
-    case HBI_SIMD_AVX2:
-        return "avx2";
-    case HBI_SIMD_AVX512:
-        return "avx512";
-    case HBI_SIMD_NEON:
-        return "neon";
-    case HBI_SIMD_LEVEL_COUNT:
-        break;
-    }
-    return "unknown";
-}
+/* ── CPU Device Discovery ─────────────────────────────────────────────────── */
 
-hbi_simd_level hbi_device_simd_level(void) {
-    return detect_compiled_simd();
-}
+hbi_status hbi_device_cpu_discover(hbi_device *device) {
+    if (device == NULL)
+        return HBI_ERR_INVALID_ARG;
 
-/* ── Cached host report ──────────────────────────────────────────────────────
- * `g_ready` gates use of g_info. Both writers compute identical values, so a
- * benign race only redoes work; acquire/release publishes the finished struct. */
-static hbi_device_info g_info;
-static atomic_int g_ready; /* 0 = not computed, 1 = computed */
+    memset(device, 0, sizeof(*device));
+    device->id = 0;
+    device->type = HBI_DEVICE_TYPE_CPU;
+    device->capabilities = detect_compiled_simd();
 
-static void compute_report(hbi_device_info *out) {
     hbi_cpu_info cpu;
-    memset(out, 0, sizeof(*out));
+    if (hbi_platform_selftest() == HBI_OK && hbi_cpu_query(&cpu) == HBI_OK) {
+        device->info.logical_cores = cpu.logical_cores;
+        device->info.physical_cores = cpu.physical_cores;
+        device->info.cacheline_size = cpu.cacheline_size;
+        snprintf(device->info.arch, sizeof(device->info.arch), "%s", cpu.arch);
 
-    if (hbi_cpu_query(&cpu) == HBI_OK) {
-        out->logical_cores = cpu.logical_cores;
-        out->physical_cores = cpu.physical_cores;
-        out->page_size = cpu.page_size;
-        out->cacheline_size = cpu.cacheline_size;
-        memcpy(out->arch, cpu.arch, sizeof(out->arch));
-        out->arch[sizeof(out->arch) - 1] = '\0';
+        device->memory.total_bytes = cpu.page_size * 1024ULL * 1024ULL; /* Fallback mockup */
+        device->memory.available_bytes = device->memory.total_bytes;
+        device->memory.alignment = 64;
+        device->memory.supports_huge_pages = false;
+        device->memory.num_regions = 1;
+        device->memory.regions[0].page_size = cpu.page_size;
+        device->memory.regions[0].numa_node = 0;
+        device->memory.regions[0].total_bytes = device->memory.total_bytes;
+        device->memory.regions[0].available_bytes = device->memory.available_bytes;
+
+        device->capabilities |= HBI_CAP_UMA; /* Default to UMA for now */
     } else {
-        /* platform only fails on a NULL arg, which cannot happen here; keep safe
-         * defaults regardless so the report is always well-formed. */
-        out->logical_cores = 1;
-        out->physical_cores = 1;
-        out->page_size = 4096;
-        out->cacheline_size = 64;
-        memcpy(out->arch, "unknown", sizeof("unknown"));
-    }
-    out->simd = detect_compiled_simd();
-}
+        /* Fallbacks */
+        device->info.logical_cores = 1;
+        device->info.physical_cores = 1;
+        device->info.cacheline_size = 64;
+        snprintf(device->info.arch, sizeof(device->info.arch), "unknown");
 
-static const hbi_device_info *cached_report(void) {
-    if (atomic_load_explicit(&g_ready, memory_order_acquire) == 0) {
-        hbi_device_info local;
-        compute_report(&local);
-        g_info = local;
-        atomic_store_explicit(&g_ready, 1, memory_order_release);
+        device->memory.total_bytes = 1024ULL * 1024ULL * 1024ULL; /* 1GB */
+        device->memory.available_bytes = device->memory.total_bytes;
+        device->memory.alignment = 64;
+        device->memory.num_regions = 1;
+        device->memory.regions[0].page_size = 4096;
+        device->memory.regions[0].numa_node = -1;
     }
-    return &g_info;
-}
 
-hbi_status hbi_device_query(hbi_device_info *out) {
-    if (out == NULL) {
-        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "device_query: out is NULL");
-    }
-    *out = *cached_report();
+    snprintf(device->info.vendor, sizeof(device->info.vendor), "Generic");
+    snprintf(device->info.name, sizeof(device->info.name), "Host CPU");
+
     return HBI_OK;
 }
 
-int hbi_device_logical_cores(void) {
-    int n = cached_report()->logical_cores;
-    return n < 1 ? 1 : n;
+/* ── Device Manager API ──────────────────────────────────────────────────── */
+
+hbi_status hbi_device_manager_create(hbi_device_manager **out_manager) {
+    if (!out_manager)
+        return HBI_ERR_INVALID_ARG;
+
+    hbi_device_manager *mgr = hbi_aligned_alloc(64, sizeof(hbi_device_manager));
+    if (!mgr)
+        return HBI_ERR_OOM;
+
+    memset(mgr, 0, sizeof(*mgr));
+
+    /* Always discover the host CPU first */
+    hbi_device *cpu_dev = &mgr->devices[mgr->num_devices++];
+    hbi_status st = hbi_device_cpu_discover(cpu_dev);
+    if (st != HBI_OK) {
+        hbi_aligned_free(mgr);
+        return st;
+    }
+
+    *out_manager = mgr;
+    return HBI_OK;
 }
 
-int hbi_device_describe(char *buf, size_t cap) {
-    const hbi_device_info *info = cached_report();
-    int n = snprintf(buf, cap, "%s %dc/%dp page=%zu line=%zu simd=%s", info->arch,
-                     info->logical_cores, info->physical_cores, info->page_size,
-                     info->cacheline_size, hbi_simd_level_str(info->simd));
-    return n;
+void hbi_device_manager_destroy(hbi_device_manager *manager) {
+    if (manager) {
+        hbi_aligned_free(manager);
+    }
 }
 
-const char *hbi_device_name(void) {
+uint32_t hbi_device_manager_get_device_count(const hbi_device_manager *manager) {
+    return manager ? manager->num_devices : 0;
+}
+
+const hbi_device *hbi_device_manager_get_device(const hbi_device_manager *manager, uint32_t index) {
+    if (!manager || index >= manager->num_devices)
+        return NULL;
+    return &manager->devices[index];
+}
+
+const hbi_device *hbi_device_manager_get_best(const hbi_device_manager *manager) {
+    if (!manager || manager->num_devices == 0)
+        return NULL;
+
+    /* Selection Policy: Return the first GPU if available, else CPU.
+       Since we only support CPU for now, return the CPU. */
+    for (uint32_t i = 0; i < manager->num_devices; ++i) {
+        if (manager->devices[i].type != HBI_DEVICE_TYPE_CPU) {
+            return &manager->devices[i];
+        }
+    }
+
+    /* Fallback to CPU */
+    return &manager->devices[0];
+}
+
+/* ── Device Accessors ────────────────────────────────────────────────────── */
+
+hbi_device_type hbi_device_get_type(const hbi_device *device) {
+    return device ? device->type : HBI_DEVICE_TYPE_COUNT;
+}
+
+hbi_device_capabilities hbi_device_get_capabilities(const hbi_device *device) {
+    return device ? device->capabilities : HBI_CAP_NONE;
+}
+
+hbi_status hbi_device_get_info(const hbi_device *device, hbi_device_info *out_info) {
+    if (!device || !out_info)
+        return HBI_ERR_INVALID_ARG;
+    *out_info = device->info;
+    return HBI_OK;
+}
+
+hbi_status hbi_device_get_memory(const hbi_device *device, hbi_device_memory *out_memory) {
+    if (!device || !out_memory)
+        return HBI_ERR_INVALID_ARG;
+    *out_memory = device->memory;
+    return HBI_OK;
+}
+
+hbi_status hbi_device_get_statistics(const hbi_device *device, hbi_device_statistics *out_stats) {
+    if (!device || !out_stats)
+        return HBI_ERR_INVALID_ARG;
+    *out_stats = device->stats;
+    return HBI_OK;
+}
+
+int hbi_device_describe(const hbi_device *device, char *buf, size_t cap) {
+    if (!device || !buf || cap == 0)
+        return 0;
+
+    const char *type_str = "Unknown";
+    switch (device->type) {
+    case HBI_DEVICE_TYPE_CPU:
+        type_str = "CPU";
+        break;
+    case HBI_DEVICE_TYPE_CUDA:
+        type_str = "CUDA";
+        break;
+    case HBI_DEVICE_TYPE_METAL:
+        type_str = "Metal";
+        break;
+    case HBI_DEVICE_TYPE_ROCM:
+        type_str = "ROCm";
+        break;
+    case HBI_DEVICE_TYPE_VULKAN:
+        type_str = "Vulkan";
+        break;
+    default:
+        break;
+    }
+
+    return snprintf(buf, cap, "[%s] %s %s %s %dc/%dp", type_str, device->info.vendor,
+                    device->info.name, device->info.arch, device->info.logical_cores,
+                    device->info.physical_cores);
+}
+
+const char *hbi_device_module_name(void) {
     return "device";
 }
 
 hbi_status hbi_device_selftest(void) {
+    hbi_device_manager *mgr = NULL;
+    if (hbi_device_manager_create(&mgr) != HBI_OK)
+        return HBI_ERR_INTERNAL;
+
+    if (hbi_device_manager_get_device_count(mgr) == 0) {
+        hbi_device_manager_destroy(mgr);
+        return HBI_ERR_INTERNAL;
+    }
+
+    const hbi_device *best = hbi_device_manager_get_best(mgr);
+    if (!best) {
+        hbi_device_manager_destroy(mgr);
+        return HBI_ERR_INTERNAL;
+    }
+
     hbi_device_info info;
-    if (hbi_device_query(&info) != HBI_OK) {
+    if (hbi_device_get_info(best, &info) != HBI_OK) {
+        hbi_device_manager_destroy(mgr);
         return HBI_ERR_INTERNAL;
     }
-    /* Core counts must be sane and page/cacheline non-zero. */
+
     if (info.logical_cores < 1 || info.physical_cores < 1) {
+        hbi_device_manager_destroy(mgr);
         return HBI_ERR_INTERNAL;
     }
-    if (info.page_size == 0 || info.cacheline_size == 0) {
-        return HBI_ERR_INTERNAL;
-    }
-    if (info.arch[0] == '\0') {
-        return HBI_ERR_INTERNAL;
-    }
-    /* Every SIMD level must have a non-empty spelling. */
-    for (int i = 0; i < HBI_SIMD_LEVEL_COUNT; ++i) {
-        const char *s = hbi_simd_level_str((hbi_simd_level)i);
-        if (s == NULL || s[0] == '\0') {
-            return HBI_ERR_INTERNAL;
-        }
-    }
+
+    hbi_device_manager_destroy(mgr);
     return HBI_OK;
 }
