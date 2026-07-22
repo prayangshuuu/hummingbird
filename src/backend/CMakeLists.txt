@@ -5,7 +5,7 @@ add_library(hummingbird::backend ALIAS hb_backend)
 target_include_directories(hb_backend
     PUBLIC "${HB_SRC_DIR}" "${HB_INCLUDE_DIR}")
 
-target_link_libraries(hb_backend PUBLIC hb_common hb_device hb_tensor)
+target_link_libraries(hb_backend PUBLIC hb_common hb_device hb_memory hb_tensor)
 
 hb_apply_common(hb_backend)
 
