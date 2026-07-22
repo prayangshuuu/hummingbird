@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="img.png" alt="Hummingbird" width="100%"/>
+  <img src="media/img.png" alt="Hummingbird" width="100%"/>
 </p>
 
 <p align="center">
@@ -86,58 +86,13 @@ You can customize the engine by passing options to CMake (`-D<option>=ON`):
 
 The engine is organized in strict layers, allowing it to scale from small devices to large accelerators seamlessly.
 
-```mermaid
-flowchart TB
-    subgraph API["Public API + Frontends"]
-        CLI["hb CLI"]
-        SRV["hb-server (HTTP)"]
-        LIB["libhummingbird (C ABI)"]
-    end
-    API --> CORE
-    subgraph CORE["Engine Core"]
-        RT["Runtime orchestrator"]
-        SCHED["Scheduler (I/O overlap)"]
-        MEM["Memory Manager (tiers)"]
-        STREAM["Streaming Engine"]
-        TENSOR["Tensor Runtime"]
-    end
-    CORE --> ADAPT
-    subgraph ADAPT["Model Adapter Layer"]
-        MODEL["Model descriptor"]
-        TOK["Tokenizer"]
-    end
-    CORE --> BACKEND
-    subgraph BACKEND["Backend ABI (plug-ins)"]
-        CPU["CPU SIMD"]
-        CUDA["CUDA"]
-        METAL["Metal"]
-    end
-```
+![Architecture](media/architecture.png)
 
 ## The Memory Hierarchy
 
 The defining feature of Hummingbird is that SSD, RAM, and VRAM are treated as one hierarchy.
 
-```mermaid
-flowchart LR
-    subgraph Storage["NVMe (SSD)"]
-        A[Cold pool of experts]
-    end
-    
-    subgraph System["RAM (LRU Cache)"]
-        B[Auto-sized cache]
-    end
-    
-    subgraph Compute["VRAM (Resident)"]
-        C[Hot compute & resident weights]
-    end
-    
-    Storage -- "Promote hot" --> System
-    System -- "Promote hot" --> Compute
-    
-    Compute -- "Evict cold" --> System
-    System -- "Evict cold" --> Storage
-```
+![Memory Hierarchy](media/memoryhierarchy.png)
 
 1. **Weight Classes:** Weights needed for every token (attention, embeddings) stay resident. The large pool of routed expert weights lives on disk and moves up on demand.
 2. **Learning Cache:** Repeated workloads keep the right weights warm. The engine gets faster the more it is used.
