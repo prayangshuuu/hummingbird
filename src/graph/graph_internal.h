@@ -6,8 +6,31 @@
 #ifndef HB_GRAPH_INTERNAL_H
 #define HB_GRAPH_INTERNAL_H
 
+#include "common/common.h"
 #include "graph/graph.h"
+#include "platform/platform.h" /* for hbi_aligned_alloc */
+#include <string.h>
 
-/* (scaffold) internal declarations go here. */
+#define HBI_GRAPH_MAX_NODES 1024u
+#define HBI_GRAPH_MAX_VALUES 4096u
+
+struct hbi_graph {
+    hbi_node *nodes;
+    uint32_t num_nodes;
+
+    hbi_value *values;
+    uint32_t num_values;
+
+    uint32_t *execution_order;
+    uint32_t num_execution_order;
+};
+
+struct hbi_graph_builder {
+    hbi_node *nodes;
+    uint32_t num_nodes;
+
+    hbi_value *values;
+    uint32_t num_values;
+};
 
 #endif /* HB_GRAPH_INTERNAL_H */
