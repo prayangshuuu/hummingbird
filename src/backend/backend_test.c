@@ -43,7 +43,7 @@ static void mock_shutdown(void) {
 
 static hbi_status mock_get_capabilities(hbi_backend_capabilities *out_caps) {
     out_caps->supported_devices = HBI_DEVICE_TYPE_CPU;
-    out_caps->supported_datatypes = HBI_DTYPE_F32 | HBI_DTYPE_F16;
+    out_caps->supported_datatypes = HBI_BACKEND_DTYPE_F32 | HBI_BACKEND_DTYPE_F16;
     out_caps->max_memory_bytes = 1024 * 1024 * 1024;
     out_caps->max_workspace_bytes = 1024 * 1024 * 1024;
     out_caps->required_alignment = 64;
@@ -134,7 +134,7 @@ int main(void) {
         return 1;
     }
     if (caps.supported_devices != HBI_DEVICE_TYPE_CPU ||
-        !(caps.supported_datatypes & HBI_DTYPE_F32)) {
+        !(caps.supported_datatypes & HBI_BACKEND_DTYPE_F32)) {
         fprintf(stderr, "Capabilities mismatch\n");
         return 1;
     }
