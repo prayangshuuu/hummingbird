@@ -21,6 +21,10 @@ hb_apply_common(bench_noop)
 add_executable(bench_planner bench_planner.c)
 target_link_libraries(bench_planner PRIVATE hummingbird::hummingbird)
 hb_apply_common(bench_planner)
+# Scheduler benchmarks (RFC-007)
+add_executable(bench_scheduler bench_scheduler.c)
+target_link_libraries(bench_scheduler PRIVATE hummingbird::hummingbird)
+hb_apply_common(bench_scheduler)
 
 # Internal micro-benchmarks (foundation primitives, no public ABI).
 add_executable(bench_alloc bench_alloc.c)

@@ -25,6 +25,8 @@ extern "C" {
 /* ── Scheduling Structs ────────────────────────────────────────────────────── */
 
 typedef struct hbi_task hbi_task;
+typedef struct hbi_task_queue hbi_task_queue;
+typedef struct hbi_task_graph hbi_task_graph;
 typedef struct hbi_execution_stage hbi_execution_stage;
 typedef struct hbi_execution_plan hbi_execution_plan;
 typedef struct hbi_scheduler hbi_scheduler;
@@ -54,6 +56,28 @@ struct hbi_task {
 
     hbi_sync_point pre_sync;  /* Synchronization required before execution */
     hbi_sync_point post_sync; /* Synchronization signaled after execution */
+};
+
+/* A simple queue for tasks ready to be scheduled (or executed). */
+struct hbi_task_queue {
+    uint32_t capacity;
+    uint32_t head;
+    uint32_t tail;
+    uint32_t count;
+    uint32_t *task_ids;
+};
+
+/* The dependency graph of tasks. Represented as an adjacency list. */
+struct hbi_task_graph {
+    uint32_t num_tasks;
+    hbi_task *tasks;
+
+    /* Outgoing edges: out_edges[i] points to an array of task IDs that depend on task i */
+    uint32_t *num_out_edges;
+    uint32_t **out_edges;
+
+    /* In-degree for topological sorting */
+    uint32_t *in_degree;
 };
 
 /* An execution stage groups tasks that can potentially run in parallel.
