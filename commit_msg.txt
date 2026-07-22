@@ -1,0 +1,21 @@
+feat: implement hummingbird runtime foundation, kernel runtime, and CPU reference kernels (RFC-003, DD-025)
+
+Modular C17 inference runtime scaffold: 22-module core under src/, stable
+hb_ public C ABI, pluggable backend ABI, tensor runtime with quantized
+matmul paths, kernel dispatch registry, architecture docs, and full
+CMake preset + CI setup.
+
+Kernel runtime — the backend-agnostic compute abstraction (layer 4):
+
+## src/kernel/ — interface (no implementations)
+- kernel.h: op taxonomy (17 ops), hbi_kernel descriptor, workspace, registry, dispatch
+- kernel.c: taxonomy tables, registry, workspace, resolve/dispatch impl
+- kernel_test.c: 13 unit tests
+
+## backends/cpu/ — CPU reference kernels
+- backend_cpu_kernels.c: 6 scalar correctness-first kernels (copy, fill, cast, elementwise, transpose, matmul)
+- backend_cpu_kernels_test.c: 8 correctness tests
+- backend_cpu.c: wired to call hb_backend_cpu_register_kernels() at init
+
+## benchmarks/
+- bench_kernel.c: RFC-003 optimization baselines (dispatch, resolve, workspace, matmul, copy, transpose)

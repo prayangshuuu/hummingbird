@@ -76,23 +76,50 @@ hbi_status hbi_exec_context_bind(hbi_exec_context *ctx, uint32_t value_id, hbi_t
     return HBI_OK;
 }
 
-hbi_status hbi_exec_context_allocate_internals(hbi_exec_context *ctx) {
-    if (!ctx)
-        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "NULL ctx");
+hbi_status hbi_exec_context_allocate_internals(hbi_exec_context *ctx, const hbi_memory_plan *plan) {
+    if (!ctx || !plan)
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "NULL arg");
 
-    /* Simple allocation loop: allocate anything not bound */
+    /* Allocate the physical pools from the planner */
+    uint32_t num_pools = hbi_memory_plan_num_pools(plan);
+    if (num_pools > 0) {
+        ctx->pools = hbi_aligned_alloc(64, sizeof(void *) * num_pools);
+        if (!ctx->pools)
+            return HBI_ERR_SET(HBI_ERR_OOM, 0, "failed to allocate pool array");
+        ctx->num_pools = num_pools;
+
+        for (uint32_t i = 0; i < num_pools; ++i) {
+            size_t size = hbi_memory_plan_pool_size(plan, i);
+            ctx->pools[i] = hbi_aligned_alloc(HBI_TENSOR_DEFAULT_ALIGN, size);
+            if (!ctx->pools[i]) {
+                return HBI_ERR_SET(HBI_ERR_OOM, 0, "failed to allocate physical pool memory");
+            }
+        }
+    }
+
+    /* Bind tensors to the allocated pools according to the plan */
     for (uint32_t i = 0; i < ctx->num_values; ++i) {
         if (ctx->values[i].tensor == NULL) {
-            const hbi_value *v = hbi_graph_value_at(ctx->graph, i);
-            hbi_tensor *t = hbi_aligned_alloc(64, sizeof(hbi_tensor));
-            if (!t)
-                return HBI_ERR_SET(HBI_ERR_OOM, 0, "failed to allocate hbi_tensor struct");
-            hbi_status st = hbi_tensor_alloc(t, v->dtype, &v->shape);
-            if (st != HBI_OK) {
-                return HBI_ERR_SETF(st, 0, "failed to allocate tensor for %s", v->name);
+            hbi_allocation alloc;
+            hbi_status st = hbi_memory_plan_get_allocation(plan, i, &alloc);
+
+            if (st == HBI_OK) {
+                const hbi_value *v = hbi_graph_value_at(ctx->graph, i);
+                hbi_tensor *t = hbi_aligned_alloc(64, sizeof(hbi_tensor));
+                if (!t)
+                    return HBI_ERR_SET(HBI_ERR_OOM, 0, "failed to alloc tensor struct");
+
+                void *ptr = (uint8_t *)ctx->pools[alloc.pool_id] + alloc.offset;
+                st = hbi_tensor_wrap(t, v->dtype, &v->shape, ptr, alloc.size_bytes);
+                if (st != HBI_OK) {
+                    hbi_aligned_free(t);
+                    return HBI_ERR_SETF(st, 0, "failed to wrap tensor for %s", v->name);
+                }
+
+                ctx->values[i].tensor = t;
+                ctx->values[i].is_owned =
+                    true; /* We own the struct, but NOT the buffer (wrap makes it BORROWED) */
             }
-            ctx->values[i].tensor = t;
-            ctx->values[i].is_owned = true;
         }
     }
     return HBI_OK;
@@ -104,11 +131,19 @@ void hbi_exec_context_destroy(hbi_exec_context *ctx) {
         if (ctx->values) {
             for (uint32_t i = 0; i < ctx->num_values; ++i) {
                 if (ctx->values[i].is_owned && ctx->values[i].tensor) {
-                    hbi_tensor_destroy(ctx->values[i].tensor);
+                    hbi_tensor_destroy(ctx->values[i].tensor); /* Safe: only zeroes if BORROWED */
                     hbi_aligned_free(ctx->values[i].tensor);
                 }
             }
             hbi_aligned_free(ctx->values);
+        }
+        if (ctx->pools) {
+            for (uint32_t i = 0; i < ctx->num_pools; ++i) {
+                if (ctx->pools[i]) {
+                    hbi_aligned_free(ctx->pools[i]);
+                }
+            }
+            hbi_aligned_free(ctx->pools);
         }
         hbi_aligned_free(ctx);
     }

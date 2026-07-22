@@ -1,5 +1,6 @@
 /* executor_test.c — unit tests for the `executor` module. */
 #include "executor/executor.h"
+#include "planner/planner.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,10 +64,17 @@ static void test_executor_simple(void) {
         hbi_tensor_alloc(&in_t_struct, HBI_DTYPE_FP32, &s);
         ASSERT_OK(hbi_exec_context_bind(ctx, in_id, &in_t_struct), "bind input");
 
-        ASSERT_OK(hbi_exec_context_allocate_internals(ctx), "allocate internals");
+        hbi_memory_planner *planner = NULL;
+        ASSERT_OK(hbi_memory_planner_create(g, &planner), "create memory planner");
+
+        hbi_memory_plan *plan = NULL;
+        ASSERT_OK(hbi_memory_planner_plan(planner, &plan), "generate memory plan");
+
+        ASSERT_OK(hbi_exec_context_allocate_internals(ctx, plan), "allocate internals");
 
         ASSERT_OK(hbi_executor_run(ex, ctx), "run executor");
 
+        hbi_memory_planner_destroy(planner);
         hbi_tensor_destroy(&in_t_struct);
         hbi_exec_context_destroy(ctx);
         hbi_executor_destroy(ex);

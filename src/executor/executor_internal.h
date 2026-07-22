@@ -36,6 +36,10 @@ struct hbi_exec_context {
 
     /* Workspace for kernel execution */
     hbi_kernel_workspace workspace;
+
+    /* Memory pools for intermediate tensors (owned by this context) */
+    void **pools;
+    uint32_t num_pools;
 };
 
 #endif /* HB_EXECUTOR_INTERNAL_H */
