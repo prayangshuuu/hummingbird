@@ -26,7 +26,13 @@ The design lets a machine with a modest amount of RAM run a model whose total si
 
 ## Getting Started
 
-You need a C17 compiler (GCC, Clang, or MSVC) and CMake version 3.20+. There are no third-party runtime dependencies (no BLAS, no Python).
+The easiest way to install Hummingbird on Linux/macOS is using our one-liner installer:
+
+```sh
+curl -sSL https://raw.githubusercontent.com/prayangshuuu/Hummingbird/main/install.sh | bash
+```
+
+Alternatively, you can build from source. You need a C17 compiler (GCC, Clang, or MSVC) and CMake version 3.20+. There are no third-party runtime dependencies (no BLAS, no Python).
 
 ```sh
 # Clone the repository
