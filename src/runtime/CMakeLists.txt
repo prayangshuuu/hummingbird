@@ -5,7 +5,7 @@ add_library(hummingbird::runtime ALIAS hb_runtime)
 target_include_directories(hb_runtime
     PUBLIC "${HB_SRC_DIR}" "${HB_INCLUDE_DIR}")
 
-target_link_libraries(hb_runtime PUBLIC hb_common hb_config hb_logging hb_profiler hb_model hb_executor hb_scheduler hb_stream hb_context hb_memory hb_backend)
+target_link_libraries(hb_runtime PUBLIC hb_common hb_config hb_logging hb_profiler hb_model hb_adapter hb_executor hb_scheduler hb_stream hb_context hb_memory hb_backend)
 
 hb_apply_common(hb_runtime)
 
