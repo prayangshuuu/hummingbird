@@ -48,8 +48,9 @@ static hbi_status make_i8(hbi_tensor *t, const int64_t *dims, uint32_t rank) {
 static void test_register(void) {
     hbi_kernel_registry_clear();
     HBI_CHECK(hb_backend_cpu_register_kernels() == HBI_OK);
-    /* copy, fill, cast, elementwise, transpose, matmul = 6 kernels. */
-    HBI_CHECK_EQ_INT(hbi_kernel_registry_count(), 6);
+    /* copy, fill, cast, elementwise, transpose, matmul, softmax, rmsnorm, rope, activation,
+     * batched_matmul, reduce = 12 kernels. */
+    HBI_CHECK_EQ_INT(hbi_kernel_registry_count(), 12);
     /* A second registration without clearing must collide (no shadowing). */
     HBI_CHECK(hb_backend_cpu_register_kernels() == HBI_ERR_STATE);
 }
@@ -251,6 +252,194 @@ static void test_matmul(void) {
     hbi_tensor_destroy(&c);
 }
 
+/* ── SOFTMAX ─────────────────────────────────────────────────────────────── */
+static void test_softmax(void) {
+    int64_t dims[1] = {3};
+    float in_vals[3] = {1.0f, 2.0f, 3.0f};
+    hbi_tensor in, out;
+    HBI_CHECK(make_fp32(&in, dims, 1, in_vals) == HBI_OK);
+    HBI_CHECK(make_fp32(&out, dims, 1, NULL) == HBI_OK);
+    hbi_kernel_args args;
+    HBI_CHECK(hbi_kernel_args_init(&args) == HBI_OK);
+    args.inputs[0] = &in;
+    args.num_inputs = 1;
+    args.outputs[0] = &out;
+    args.num_outputs = 1;
+    HBI_CHECK(hbi_kernel_dispatch(HBI_KERNEL_OP_SOFTMAX, HBI_TENSOR_DEVICE_CPU, &args, NULL) ==
+              HBI_OK);
+    const float *p = (const float *)out.data;
+    /* Softmax of [1, 2, 3] */
+    /* exp(1-3) = 0.135335, exp(2-3) = 0.367879, exp(3-3) = 1.0 */
+    /* sum = 1.503214 */
+    /* p[0] = 0.09003, p[1] = 0.2447, p[2] = 0.66524 */
+    HBI_CHECK(p[0] > 0.089f && p[0] < 0.091f);
+    HBI_CHECK(p[1] > 0.243f && p[1] < 0.246f);
+    HBI_CHECK(p[2] > 0.664f && p[2] < 0.666f);
+    hbi_tensor_destroy(&in);
+    hbi_tensor_destroy(&out);
+}
+
+/* ── RMSNORM ─────────────────────────────────────────────────────────────── */
+static void test_rmsnorm(void) {
+    int64_t dims[1] = {2};
+    float x_vals[2] = {3.0f, 4.0f};
+    float w_vals[2] = {1.0f, 2.0f};
+    hbi_tensor x, w, out;
+    HBI_CHECK(make_fp32(&x, dims, 1, x_vals) == HBI_OK);
+    HBI_CHECK(make_fp32(&w, dims, 1, w_vals) == HBI_OK);
+    HBI_CHECK(make_fp32(&out, dims, 1, NULL) == HBI_OK);
+    hbi_kernel_args args;
+    HBI_CHECK(hbi_kernel_args_init(&args) == HBI_OK);
+    args.inputs[0] = &x;
+    args.inputs[1] = &w;
+    args.num_inputs = 2;
+    args.outputs[0] = &out;
+    args.num_outputs = 1;
+    HBI_CHECK(hbi_kernel_dispatch(HBI_KERNEL_OP_RMSNORM, HBI_TENSOR_DEVICE_CPU, &args, NULL) ==
+              HBI_OK);
+    const float *p = (const float *)out.data;
+    /* mean_sq = (9 + 16)/2 = 12.5 */
+    /* rms = sqrt(12.5 + 1e-5) ~= 3.535535 */
+    /* out[0] = 3 / 3.535535 * 1 = 0.848528 */
+    /* out[1] = 4 / 3.535535 * 2 = 2.262741 */
+    HBI_CHECK(p[0] > 0.84f && p[0] < 0.85f);
+    HBI_CHECK(p[1] > 2.26f && p[1] < 2.27f);
+    hbi_tensor_destroy(&x);
+    hbi_tensor_destroy(&w);
+    hbi_tensor_destroy(&out);
+}
+
+/* ── ROPE ────────────────────────────────────────────────────────────────── */
+static void test_rope(void) {
+    int64_t dims[3] = {1, 1, 2};    /* seq=1, head=1, dim=2 */
+    float x_vals[2] = {1.0f, 0.0f}; /* cos(pos=1, freq=1) = cos(1)=0.5403, sin(1)=0.8414 */
+    hbi_tensor in, out;
+    HBI_CHECK(make_fp32(&in, dims, 3, x_vals) == HBI_OK);
+    HBI_CHECK(make_fp32(&out, dims, 3, NULL) == HBI_OK);
+    hbi_kernel_args args;
+    HBI_CHECK(hbi_kernel_args_init(&args) == HBI_OK);
+    args.inputs[0] = &in;
+    args.num_inputs = 1;
+    args.outputs[0] = &out;
+    args.num_outputs = 1;
+    args.params.u.fill_value = 1.0; /* pos offset = 1 */
+    HBI_CHECK(hbi_kernel_dispatch(HBI_KERNEL_OP_ROPE, HBI_TENSOR_DEVICE_CPU, &args, NULL) ==
+              HBI_OK);
+    const float *p = (const float *)out.data;
+    /* theta=10000, d=0, freq=pos / theta^0 = 1 */
+    /* p[0] = x[0]*cos(1) - x[1]*sin(1) = 1*0.540302 = 0.540302 */
+    /* p[1] = x[0]*sin(1) + x[1]*cos(1) = 1*0.841471 = 0.841471 */
+    HBI_CHECK(p[0] > 0.54f && p[0] < 0.55f);
+    HBI_CHECK(p[1] > 0.84f && p[1] < 0.85f);
+    hbi_tensor_destroy(&in);
+    hbi_tensor_destroy(&out);
+}
+
+/* ── ACTIVATION ──────────────────────────────────────────────────────────── */
+static void test_activation(void) {
+    int64_t dims[1] = {2};
+    float x_vals[2] = {2.0f, -1.0f};
+    hbi_tensor in, out;
+    HBI_CHECK(make_fp32(&in, dims, 1, x_vals) == HBI_OK);
+    HBI_CHECK(make_fp32(&out, dims, 1, NULL) == HBI_OK);
+    hbi_kernel_args args;
+    HBI_CHECK(hbi_kernel_args_init(&args) == HBI_OK);
+    args.inputs[0] = &in;
+    args.num_inputs = 1;
+    args.outputs[0] = &out;
+    args.num_outputs = 1;
+
+    /* RELU */
+    args.params.u.activation = HBI_ACTIVATION_RELU;
+    HBI_CHECK(hbi_kernel_dispatch(HBI_KERNEL_OP_ACTIVATION, HBI_TENSOR_DEVICE_CPU, &args, NULL) ==
+              HBI_OK);
+    const float *p = (const float *)out.data;
+    HBI_CHECK(p[0] == 2.0f);
+    HBI_CHECK(p[1] == 0.0f);
+
+    /* SILU */
+    args.params.u.activation = HBI_ACTIVATION_SILU;
+    HBI_CHECK(hbi_kernel_dispatch(HBI_KERNEL_OP_ACTIVATION, HBI_TENSOR_DEVICE_CPU, &args, NULL) ==
+              HBI_OK);
+    /* 2 / (1 + exp(-2)) = 2 / 1.135335 = 1.7615 */
+    /* -1 / (1 + exp(1)) = -1 / 3.71828 = -0.2689 */
+    HBI_CHECK(p[0] > 1.76f && p[0] < 1.77f);
+    HBI_CHECK(p[1] > -0.27f && p[1] < -0.26f);
+
+    /* GELU */
+    args.params.u.activation = HBI_ACTIVATION_GELU;
+    HBI_CHECK(hbi_kernel_dispatch(HBI_KERNEL_OP_ACTIVATION, HBI_TENSOR_DEVICE_CPU, &args, NULL) ==
+              HBI_OK);
+    /* 2 * 0.5 * (1 + tanh(0.79788*(2 + 0.0447*8))) = 1 + tanh(1.88) = 1.9545 -> actually
+     * around 1.954 */
+    /* gelu(2) ~ 1.9545, gelu(-1) ~ -0.1586 */
+    HBI_CHECK(p[0] > 1.95f && p[0] < 1.96f);
+    HBI_CHECK(p[1] > -0.16f && p[1] < -0.15f);
+
+    hbi_tensor_destroy(&in);
+    hbi_tensor_destroy(&out);
+}
+
+/* ── BATCHED_MATMUL ──────────────────────────────────────────────────────── */
+static void test_batched_matmul(void) {
+    int64_t ad[3] = {2, 1, 2};      /* B=2, M=1, K=2 */
+    int64_t bd[3] = {2, 2, 1};      /* B=2, K=2, N=1 */
+    int64_t cd[3] = {2, 1, 1};      /* B=2, M=1, N=1 */
+    float a_vals[4] = {1, 2, 3, 4}; /* batch0=[[1,2]], batch1=[[3,4]] */
+    float b_vals[4] = {5, 6, 7, 8}; /* batch0=[[5],[6]], batch1=[[7],[8]] */
+    hbi_tensor a, b, c;
+    HBI_CHECK(make_fp32(&a, ad, 3, a_vals) == HBI_OK);
+    HBI_CHECK(make_fp32(&b, bd, 3, b_vals) == HBI_OK);
+    HBI_CHECK(make_fp32(&c, cd, 3, NULL) == HBI_OK);
+    hbi_kernel_args args;
+    HBI_CHECK(hbi_kernel_args_init(&args) == HBI_OK);
+    args.inputs[0] = &a;
+    args.inputs[1] = &b;
+    args.num_inputs = 2;
+    args.outputs[0] = &c;
+    args.num_outputs = 1;
+    HBI_CHECK(hbi_kernel_dispatch(HBI_KERNEL_OP_BATCHED_MATMUL, HBI_TENSOR_DEVICE_CPU, &args,
+                                  NULL) == HBI_OK);
+    const float *pc = (const float *)c.data;
+    /* batch0: 1*5 + 2*6 = 17 */
+    /* batch1: 3*7 + 4*8 = 53 */
+    HBI_CHECK(pc[0] == 17.0f);
+    HBI_CHECK(pc[1] == 53.0f);
+    hbi_tensor_destroy(&a);
+    hbi_tensor_destroy(&b);
+    hbi_tensor_destroy(&c);
+}
+
+/* ── REDUCE ──────────────────────────────────────────────────────────────── */
+static void test_reduce(void) {
+    int64_t dims[2] = {2, 2};
+    float in_vals[4] = {1.0f, -2.0f, 3.0f, -4.0f};
+    int64_t odims[1] = {1};
+    hbi_tensor in, out;
+    HBI_CHECK(make_fp32(&in, dims, 2, in_vals) == HBI_OK);
+    HBI_CHECK(make_fp32(&out, odims, 1, NULL) == HBI_OK);
+    hbi_kernel_args args;
+    HBI_CHECK(hbi_kernel_args_init(&args) == HBI_OK);
+    args.inputs[0] = &in;
+    args.num_inputs = 1;
+    args.outputs[0] = &out;
+    args.num_outputs = 1;
+
+    args.params.u.reduce = HBI_REDUCE_SUM;
+    HBI_CHECK(hbi_kernel_dispatch(HBI_KERNEL_OP_REDUCE, HBI_TENSOR_DEVICE_CPU, &args, NULL) ==
+              HBI_OK);
+    const float *p = (const float *)out.data;
+    HBI_CHECK(p[0] == -2.0f); /* 1 - 2 + 3 - 4 */
+
+    args.params.u.reduce = HBI_REDUCE_MAX;
+    HBI_CHECK(hbi_kernel_dispatch(HBI_KERNEL_OP_REDUCE, HBI_TENSOR_DEVICE_CPU, &args, NULL) ==
+              HBI_OK);
+    HBI_CHECK(p[0] == 3.0f);
+
+    hbi_tensor_destroy(&in);
+    hbi_tensor_destroy(&out);
+}
+
 /* ── Error handling (never crash) ────────────────────────────────────────── */
 
 static void test_errors(void) {
@@ -334,6 +523,12 @@ int main(void) {
     HBI_RUN(test_elementwise);
     HBI_RUN(test_transpose);
     HBI_RUN(test_matmul);
+    HBI_RUN(test_softmax);
+    HBI_RUN(test_rmsnorm);
+    HBI_RUN(test_rope);
+    HBI_RUN(test_activation);
+    HBI_RUN(test_batched_matmul);
+    HBI_RUN(test_reduce);
     HBI_RUN(test_errors);
     return HBI_TEST_END();
 }

@@ -8,6 +8,10 @@
 
 #include "quant/quant.h"
 
-/* (scaffold) internal declarations go here. */
+#include <stdbool.h>
+#include <stdint.h>
+
+/* All decode helpers are file-static in quant.c; nothing crosses the boundary
+ * yet beyond the public API. Declarations land here if the module is split. */
 
 #endif /* HB_QUANT_INTERNAL_H */

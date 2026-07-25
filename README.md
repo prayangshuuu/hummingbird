@@ -125,6 +125,11 @@ int main(void) {
     return 0;
 }
 ```
+
+## Acknowledgements
+
+Heavily Inspired By [Colibri](https://github.com/JustVugg/colibri).
+
 ## License
 
 Hummingbird is released under the [Apache License, Version 2.0](LICENSE).

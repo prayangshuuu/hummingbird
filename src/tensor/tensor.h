@@ -64,11 +64,14 @@ typedef enum hbi_dtype {
     HBI_DTYPE_FP16,
     HBI_DTYPE_BF16,
     HBI_DTYPE_INT8,
-    HBI_DTYPE_INT4, /* sub-byte, 4 bits, packed 2/byte */
-    HBI_DTYPE_INT2, /* sub-byte, 2 bits, packed 4/byte */
-    HBI_DTYPE_FP8,  /* RESERVED — query-able, not yet allocatable */
-    HBI_DTYPE_NF4,  /* RESERVED — query-able, not yet allocatable */
-    HBI_DTYPE_COUNT /* sentinel: number of dtypes (not a dtype) */
+    HBI_DTYPE_INT4,  /* sub-byte, 4 bits, packed 2/byte */
+    HBI_DTYPE_INT2,  /* sub-byte, 2 bits, packed 4/byte */
+    HBI_DTYPE_FP8,   /* RESERVED — query-able, not yet allocatable */
+    HBI_DTYPE_NF4,   /* RESERVED — query-able, not yet allocatable */
+    HBI_DTYPE_MXFP4, /* OCP microscaling FP4 (E2M1), 4 bits packed 2/byte, with a
+                      * per-32-element shared E8M0 scale. Storable/indexable here;
+                      * decoding to fp32 is the quant module's job (DD-036). */
+    HBI_DTYPE_COUNT  /* sentinel: number of dtypes (not a dtype) */
 } hbi_dtype;
 
 /* Stable lower-case spelling ("fp32","int4",…). Never NULL; "invalid" for out-

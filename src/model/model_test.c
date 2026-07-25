@@ -343,6 +343,115 @@ static int test_selftest(void) {
     return 0;
 }
 
+/* ── Safetensors round-trip (RFC-015) ────────────────────────────────────── */
+
+/* Write a minimal safetensors file: 8-byte LE header length, JSON header, then
+ * a data region sized to cover the declared tensors. Returns 0 on success. */
+static int write_safetensors(const char *path, const char *json, size_t data_bytes) {
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        return 1;
+    }
+    uint64_t hlen = (uint64_t)strlen(json);
+    uint8_t lenbuf[8];
+    for (int i = 0; i < 8; i++) {
+        lenbuf[i] = (uint8_t)((hlen >> (8 * i)) & 0xFFu);
+    }
+    int ok = 1;
+    if (fwrite(lenbuf, 1, 8, f) == 8 && fwrite(json, 1, (size_t)hlen, f) == (size_t)hlen) {
+        /* Zero-fill the data region. */
+        ok = 0;
+        for (size_t i = 0; i < data_bytes; i++) {
+            if (fputc(0, f) == EOF) {
+                ok = 1;
+                break;
+            }
+        }
+    }
+    fclose(f);
+    return ok;
+}
+
+static int test_safetensors_roundtrip(void) {
+    hbi_format_handler_registry_clear();
+    ASSERT(hbi_format_safetensors_register() == HBI_OK, "register safetensors");
+
+    /* Two f32 tensors: w [2,3]=24B at [0,24), b [3]=12B at [24,36). */
+    const char *json = "{\"__metadata__\":{\"architecture\":\"gpt_oss\"},"
+                       "\"w\":{\"dtype\":\"F32\",\"shape\":[2,3],\"data_offsets\":[0,24]},"
+                       "\"b\":{\"dtype\":\"F32\",\"shape\":[3],\"data_offsets\":[24,36]}}";
+    const char *path = "test_tmp_model.safetensors";
+    ASSERT(write_safetensors(path, json, 36) == 0, "write fixture");
+
+    hbi_load_options opts;
+    memset(&opts, 0, sizeof(opts));
+    opts.model_path = path;
+    opts.format_hint = HBI_MODEL_FORMAT_UNKNOWN;
+
+    hbi_load_session *session = NULL;
+    hbi_status st = hbi_model_load(&opts, hbi_allocator_system(), &session);
+    ASSERT(st == HBI_OK, "load safetensors");
+    ASSERT(session != NULL, "session non-null");
+
+    const hbi_model_manifest *man = hbi_load_session_manifest(session);
+    ASSERT(hbi_model_manifest_count(man) == 2, "two tensors");
+
+    const hbi_tensor_entry *w = hbi_model_manifest_find(man, "w");
+    ASSERT(w != NULL, "find w");
+    ASSERT(w->dtype == HBI_DTYPE_FP32, "w dtype");
+    ASSERT(w->shape.rank == 2 && w->shape.dims[0] == 2 && w->shape.dims[1] == 3, "w shape");
+    ASSERT(w->byte_size == 24, "w byte_size");
+
+    const hbi_tensor_entry *b = hbi_model_manifest_find(man, "b");
+    ASSERT(b != NULL, "find b");
+    ASSERT(b->file_offset == w->file_offset + 24, "b offset follows w");
+
+    const hbi_model_metadata *md = hbi_load_session_metadata(session);
+    const char *arch = hbi_model_metadata_get(md, "architecture");
+    ASSERT(arch != NULL && strcmp(arch, "gpt_oss") == 0, "metadata architecture");
+
+    /* Read tensor data back. */
+    const hbi_format_handler *h = hbi_format_handler_find(HBI_MODEL_FORMAT_SAFETENSORS);
+    ASSERT(h != NULL, "handler present");
+    float buf[6] = {1, 2, 3, 4, 5, 6};
+    st = h->read_tensor_data(path, w, buf, sizeof(buf));
+    ASSERT(st == HBI_OK, "read w data");
+    ASSERT(buf[0] == 0.0f && buf[5] == 0.0f, "w data zero-filled");
+
+    hbi_model_load_session_destroy(session);
+    remove(path);
+    return 0;
+}
+
+static int test_safetensors_corrupt(void) {
+    hbi_format_handler_registry_clear();
+    ASSERT(hbi_format_safetensors_register() == HBI_OK, "register safetensors");
+
+    /* data_offsets past EOF: declares 100 bytes but file has only 4. */
+    const char *json = "{\"w\":{\"dtype\":\"F32\",\"shape\":[1],\"data_offsets\":[0,100]}}";
+    const char *path = "test_tmp_bad.safetensors";
+    ASSERT(write_safetensors(path, json, 4) == 0, "write bad fixture");
+
+    hbi_load_options opts;
+    memset(&opts, 0, sizeof(opts));
+    opts.model_path = path;
+
+    hbi_load_session *session = NULL;
+    hbi_status st = hbi_model_load(&opts, hbi_allocator_system(), &session);
+    ASSERT(st != HBI_OK, "reject out-of-bounds tensor");
+    ASSERT(session == NULL, "no session on failure");
+    remove(path);
+
+    /* Unknown dtype. */
+    const char *json2 = "{\"w\":{\"dtype\":\"C64\",\"shape\":[1],\"data_offsets\":[0,8]}}";
+    ASSERT(write_safetensors(path, json2, 8) == 0, "write bad dtype");
+    session = NULL;
+    st = hbi_model_load(&opts, hbi_allocator_system(), &session);
+    ASSERT(st != HBI_OK, "reject unknown dtype");
+    remove(path);
+    return 0;
+}
+
 int main(void) {
     hbi_error_clear();
 
@@ -355,6 +464,8 @@ int main(void) {
     failures += test_format_handler_registry();
     failures += test_load_pipeline_with_mock();
     failures += test_load_pipeline_errors();
+    failures += test_safetensors_roundtrip();
+    failures += test_safetensors_corrupt();
     failures += test_selftest();
 
     if (failures == 0) {

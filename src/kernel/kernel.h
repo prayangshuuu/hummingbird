@@ -53,9 +53,10 @@ extern "C" {
 #endif
 
 /* Maximum operands a single kernel call may take. Fixed so hbi_kernel_args is a
- * POD value type with no heap indirection. Two inputs + one output covers every
- * op in this phase (matmul, elementwise); raised later if an op needs more. */
-#define HBI_KERNEL_MAX_INPUTS 4u
+ * POD value type with no heap indirection. Raised from 4 to 8 (DD-027) so fused
+ * ops can carry more operands: attention takes q/k/v/(+bias/sinks/mask), and MoE
+ * routing takes hidden/router/expert-gate_up/expert-down. */
+#define HBI_KERNEL_MAX_INPUTS 8u
 #define HBI_KERNEL_MAX_OUTPUTS 2u
 
 /* ── Operation taxonomy ──────────────────────────────────────────────────────

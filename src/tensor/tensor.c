@@ -52,6 +52,8 @@ const char *hbi_dtype_str(hbi_dtype dt) {
         return "fp8";
     case HBI_DTYPE_NF4:
         return "nf4";
+    case HBI_DTYPE_MXFP4:
+        return "mxfp4";
     case HBI_DTYPE_INVALID:
     case HBI_DTYPE_COUNT:
         break;
@@ -74,6 +76,8 @@ uint32_t hbi_dtype_bits(hbi_dtype dt) {
         return 4u;
     case HBI_DTYPE_INT2:
         return 2u;
+    case HBI_DTYPE_MXFP4:
+        return 4u; /* E2M1 element, 4 bits packed 2/byte */
     case HBI_DTYPE_INVALID:
     case HBI_DTYPE_COUNT:
         break;
@@ -95,6 +99,8 @@ size_t hbi_dtype_align(hbi_dtype dt) {
     case HBI_DTYPE_INT2:
     case HBI_DTYPE_NF4:
         return 1u; /* sub-byte types report 1 */
+    case HBI_DTYPE_MXFP4:
+        return 1u; /* sub-byte packed 2/byte; byte-addressed */
     case HBI_DTYPE_INVALID:
     case HBI_DTYPE_COUNT:
         break;
@@ -111,7 +117,8 @@ bool hbi_dtype_is_valid(hbi_dtype dt) {
 }
 
 bool hbi_dtype_is_sub_byte(hbi_dtype dt) {
-    return dt == HBI_DTYPE_INT4 || dt == HBI_DTYPE_INT2 || dt == HBI_DTYPE_NF4;
+    return dt == HBI_DTYPE_INT4 || dt == HBI_DTYPE_INT2 || dt == HBI_DTYPE_NF4 ||
+           dt == HBI_DTYPE_MXFP4;
 }
 
 hbi_status hbi_dtype_packed_nbytes(hbi_dtype dt, int64_t count, size_t *out) {
@@ -941,6 +948,7 @@ hbi_status hbi_quant_meta_validate(const hbi_quant_meta *m, const hbi_tensor *t)
     case HBI_DTYPE_INT4:
     case HBI_DTYPE_INT2:
     case HBI_DTYPE_NF4:
+    case HBI_DTYPE_MXFP4:
         break;
     default:
         return HBI_ERR_SETF(HBI_ERR_INVALID_ARG, 0, "quant_meta_validate: dtype %s not quantizable",
