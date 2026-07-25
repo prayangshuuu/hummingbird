@@ -16,6 +16,10 @@
 
 ---
 
+## Acknowledgement
+
+This project is heavily inspired by [Colibri](https://github.com/JustVugg/colibri). Hummingbird was never intended to be a direct copy of Colibri; rather, it aims to build upon those ideas with a completely different architecture and approach. The key difference is that while Colibri is a highly specialized engine allowing you to run massive models like GLM-5.2 (744B MoE) on a 25GB-RAM consumer machine via SSD streaming, Hummingbird provides a generalized, modular inference framework designed to run *any* model architecture through its flexible adapter interface.
+
 ## Why Hummingbird?
 
 Frontier open-weight models have grown past the point where they fit in the memory of an ordinary machine. A model with hundreds of billions of parameters needs far more RAM than a laptop or a single consumer GPU can offer.
@@ -125,10 +129,6 @@ int main(void) {
     return 0;
 }
 ```
-
-## Acknowledgements
-
-Heavily Inspired By [Colibri](https://github.com/JustVugg/colibri).
 
 ## License
 
