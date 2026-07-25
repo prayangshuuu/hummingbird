@@ -1213,7 +1213,7 @@ in `docs/architecture/03-dependency-graph.md`.
     unit tests vs scalar reference; matmul dispatch; IDOT.
   - `M3 — Model adapter + forward (CPU, resident)`: GLM-5.2 adapter; MLA attention;
     router/MoE; token-exact oracle parity on a tiny model.
-  - `M4 — Streaming + cache`: coalesced expert loading; 3-tier cache; learning cache;
+  - `M4 — Streaming + cache`: (completed via RFC-017) coalesced expert loading; 3-tier cache; learning cache;
     PIPE overlap. Run the real model on a small-RAM host.
 - **Future milestones:**
   - `M5 — Scheduler`: PILOT prefetch; io_uring; NUMA.
@@ -1519,6 +1519,12 @@ repository**. If you find it stale, fixing it is the first task.
 - **Context:** The engine must execute kernels on CUDA GPUs, managing asynchronous execution, memory copies (H2D/D2H), device discovery, and error translation without bleeding CUDA specifics into the main runtime.
 - **Chosen:** Implemented the CUDA backend in `backends/cuda/backend_cuda.cu` alongside device and stream managers. It translates `cudaError_t` to `hbi_status`, uses `cudaStream_t` for non-blocking execution, and dynamically registers baseline implementations for RMSNorm, MatMul, Linear, Attention, and Elementwise kernels into the core registry.
 - **Tradeoffs:** Currently registers baseline kernels. Advanced kernel fusions and stream optimizations (like compute/transfer overlap) are deferred until the foundational pipeline is rock-solid.
+
+### DD-033 — Hierarchical Streaming Engine & Adaptive Cache (RFC-017) `[BUILT]`
+- **Problem:** Hummingbird needs to run massive models (like 744B MoEs) by streaming parameters from NVMe because they exceed physical RAM/VRAM capacity.
+- **Context:** The core philosophy shifts from fitting a model into memory to placing cold/warm/hot weights intelligently across 4 tiers (CPU Cache, RAM, VRAM, NVMe SSD). This subsystem defines Hummingbird.
+- **Chosen:** Implemented the Hierarchical Streaming Engine in `src/stream/`. It provides a Hierarchical Memory Manager, an Adaptive Cache with pluggable policies (LRU, LFU, ARC), a Residency Manager, an Expert Locality Tracker, and a Prefetch Engine.
+- **Tradeoffs:** Correctness and generic adaptivity are prioritized over model-specific or hardware-specific heuristics. Advanced predictive prefetching is deferred until real-world statistics guide it.
 
 ---
 
