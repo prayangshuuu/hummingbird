@@ -4,8 +4,8 @@
 
 extern "C" {
 #include "backend/backend.h"
-#include "kernel/kernel.h"
 #include "backend_cuda.h"
+#include "kernel/kernel.h"
 }
 
 /* Dummy kernels for RMSNorm, Linear, MatMul, Attention, Elementwise */
@@ -17,15 +17,19 @@ static hbi_status cuda_dummy_run(const hbi_kernel_args *args, hbi_kernel_workspa
 
 static hbi_status cuda_dummy_workspace_size(const hbi_kernel_args *args, size_t *out_bytes) {
     (void)args;
-    if (out_bytes) *out_bytes = 0;
+    if (out_bytes)
+        *out_bytes = 0;
     return HBI_OK;
 }
 
-static hbi_dtype dtypes_f32[] = { HBI_DTYPE_FP32 };
-static hbi_dtype dtypes_f16[] = { HBI_DTYPE_FP16 };
+static hbi_dtype dtypes_f32[] = {HBI_DTYPE_FP32};
+static hbi_dtype dtypes_f16[] = {HBI_DTYPE_FP16};
 
-#define DECL_DUMMY_KERNEL(op_enum, name_str, dt_arr, num_dt) \
-    { op_enum, name_str, HBI_TENSOR_DEVICE_RESERVED_1, dt_arr, num_dt, HBI_KERNEL_LAYOUT_ANY, cuda_dummy_workspace_size, cuda_dummy_run }
+#define DECL_DUMMY_KERNEL(op_enum, name_str, dt_arr, num_dt)                                       \
+    {                                                                                              \
+        op_enum, name_str, HBI_TENSOR_DEVICE_RESERVED_1, dt_arr, num_dt, HBI_KERNEL_LAYOUT_ANY,    \
+            cuda_dummy_workspace_size, cuda_dummy_run                                              \
+    }
 
 /* Note: we use HBI_TENSOR_DEVICE_RESERVED_1 until HBI_TENSOR_DEVICE_CUDA exists */
 
@@ -42,7 +46,8 @@ extern "C" hbi_status hb_backend_cuda_register_kernels(void) {
     int num_kernels = sizeof(g_cuda_kernels) / sizeof(g_cuda_kernels[0]);
     for (int i = 0; i < num_kernels; ++i) {
         st = hbi_kernel_register(&g_cuda_kernels[i]);
-        if (st != HBI_OK) return st;
+        if (st != HBI_OK)
+            return st;
     }
     return HBI_OK;
 }
