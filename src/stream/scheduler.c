@@ -63,12 +63,14 @@ bool hbi_scheduler_demote(hbi_scheduler_t *sched, hbi_block_id_t id) {
 }
 
 bool hbi_scheduler_pin(hbi_scheduler_t *sched, hbi_block_id_t id) {
+    (void)id;
     if (!sched)
         return false;
     return true; // Simplified for M4
 }
 
 bool hbi_scheduler_unpin(hbi_scheduler_t *sched, hbi_block_id_t id) {
+    (void)id;
     if (!sched)
         return false;
     return true; // Simplified for M4
@@ -87,9 +89,12 @@ bool hbi_scheduler_evict(hbi_scheduler_t *sched, hbi_block_id_t id) {
 }
 
 void hbi_scheduler_invalidate(hbi_scheduler_t *sched, hbi_block_id_t id) {
+    (void)sched;
+    (void)id;
     // Invalidate caches if needed
 }
 
 void hbi_scheduler_sync(hbi_scheduler_t *sched) {
+    (void)sched;
     // Sync I/O operations
 }

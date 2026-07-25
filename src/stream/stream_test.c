@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static void test_memory_manager() {
+static void test_memory_manager(void) {
     size_t capacities[HB_TIER_COUNT] = {1024, 4096, 8192, 0};
     hbi_memory_manager_t *mm = hbi_memory_manager_create(capacities);
     assert(mm != NULL);
@@ -21,7 +21,7 @@ static void test_memory_manager() {
     printf("[ok] memory_manager\n");
 }
 
-static void test_cache_manager() {
+static void test_cache_manager(void) {
     hbi_cache_manager_t *cache = hbi_cache_manager_create(HB_CACHE_POLICY_LRU, 4096);
     assert(cache != NULL);
 
@@ -40,7 +40,7 @@ static void test_cache_manager() {
     printf("[ok] cache_manager\n");
 }
 
-static void test_scheduler() {
+static void test_scheduler(void) {
     size_t capacities[HB_TIER_COUNT] = {1024, 1024, 8192, 0};
     hbi_memory_manager_t *mm = hbi_memory_manager_create(capacities);
     hbi_cache_manager_t *cache = hbi_cache_manager_create(HB_CACHE_POLICY_LRU, 1024);

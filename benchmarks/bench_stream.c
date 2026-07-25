@@ -6,13 +6,13 @@
 
 #define BENCH_ITERATIONS 100000
 
-static double get_time() {
+static double get_time(void) {
     struct timespec ts;
     timespec_get(&ts, TIME_UTC);
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
 }
 
-static void bench_sequential_streaming() {
+static void bench_sequential_streaming(void) {
     size_t capacities[HB_TIER_COUNT] = {1024 * 1024, 1024 * 1024, 8192 * 1024, 0};
     hbi_memory_manager_t *mm = hbi_memory_manager_create(capacities);
     hbi_cache_manager_t *cache = hbi_cache_manager_create(HB_CACHE_POLICY_LRU, 1024 * 1024);
@@ -20,7 +20,7 @@ static void bench_sequential_streaming() {
 
     double start = get_time();
     for (int i = 0; i < BENCH_ITERATIONS; i++) {
-        hbi_scheduler_load(sched, i % 1024, 1024);
+        hbi_scheduler_load(sched, (hbi_block_id_t)(i % 1024), 1024);
     }
     double end = get_time();
 
@@ -31,7 +31,7 @@ static void bench_sequential_streaming() {
     hbi_memory_manager_destroy(mm);
 }
 
-static void bench_random_streaming() {
+static void bench_random_streaming(void) {
     size_t capacities[HB_TIER_COUNT] = {1024 * 1024, 1024 * 1024, 8192 * 1024, 0};
     hbi_memory_manager_t *mm = hbi_memory_manager_create(capacities);
     hbi_cache_manager_t *cache = hbi_cache_manager_create(HB_CACHE_POLICY_LRU, 1024 * 1024);
@@ -39,7 +39,7 @@ static void bench_random_streaming() {
 
     double start = get_time();
     for (int i = 0; i < BENCH_ITERATIONS; i++) {
-        hbi_scheduler_load(sched, rand() % 2048, 1024);
+        hbi_scheduler_load(sched, (hbi_block_id_t)(rand() % 2048), 1024);
     }
     double end = get_time();
 
@@ -50,8 +50,9 @@ static void bench_random_streaming() {
     hbi_memory_manager_destroy(mm);
 }
 
-int main() {
+int main(void) {
     printf("=== Streaming Engine Benchmarks ===\n");
+    srand(42);
     bench_sequential_streaming();
     bench_random_streaming();
     return 0;
