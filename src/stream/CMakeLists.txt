@@ -1,5 +1,5 @@
 # hb_stream — Weight streaming: contiguity to single coalesced read to zero-copy views (hard invariant).
-add_library(hb_stream STATIC stream.c)
+add_library(hb_stream STATIC stream.c memory.c cache.c scheduler.c prefetch.c tracker.c)
 add_library(hummingbird::stream ALIAS hb_stream)
 
 target_include_directories(hb_stream
