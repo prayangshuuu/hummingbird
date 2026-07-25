@@ -16,6 +16,9 @@ extern "C" {
 /* Register the CUDA backend. Returns HBI_OK on success. */
 hbi_status hb_backend_cuda_register(void);
 
+/* Register CUDA kernels */
+hbi_status hb_backend_cuda_register_kernels(void);
+
 #ifdef __cplusplus
 }
 #endif
