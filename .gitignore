@@ -43,6 +43,7 @@ Testing/
 .vscode/
 .vs/
 .idea/
+.qoder/
 *.swp
 *~
 

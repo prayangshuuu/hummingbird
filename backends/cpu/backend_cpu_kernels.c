@@ -396,6 +396,324 @@ static hbi_status cpu_matmul_run(const hbi_kernel_args *args, hbi_kernel_workspa
     return HBI_OK;
 }
 
+/* ── SOFTMAX ─────────────────────────────────────────────────────────────────
+ * out[i] = exp(in[i] - max(in)) / sum(exp(in[i] - max(in)))
+ * 1D or [1,N], fp32. */
+static hbi_status cpu_softmax_run(const hbi_kernel_args *args, hbi_kernel_workspace *ws) {
+    (void)ws;
+    hbi_status st = require_arity(args, 1, 1, "softmax");
+    if (st != HBI_OK)
+        return st;
+    const hbi_tensor *in = args->inputs[0];
+    hbi_tensor *out = args->outputs[0];
+    if ((st = require_contiguous(in, "softmax.in")) != HBI_OK)
+        return st;
+    if ((st = require_contiguous(out, "softmax.out")) != HBI_OK)
+        return st;
+    if (hbi_tensor_dtype(in) != HBI_DTYPE_FP32 || hbi_tensor_dtype(out) != HBI_DTYPE_FP32) {
+        return HBI_ERR_SET(HBI_ERR_UNSUPPORTED, 0, "softmax: fp32 only (reference kernel)");
+    }
+    if (!hbi_shape_equal(hbi_tensor_shape(in), hbi_tensor_shape(out))) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "softmax: shape mismatch");
+    }
+    int64_t n = 0;
+    if ((st = elem_count(in, &n)) != HBI_OK)
+        return st;
+    if (n == 0)
+        return HBI_OK;
+
+    const float *pin = (const float *)hbi_tensor_cdata(in);
+    float *pout = (float *)hbi_tensor_data_mut(out);
+
+    float max_val = pin[0];
+    for (int64_t i = 1; i < n; ++i) {
+        if (pin[i] > max_val)
+            max_val = pin[i];
+    }
+    float sum = 0.0f;
+    for (int64_t i = 0; i < n; ++i) {
+        float e = expf(pin[i] - max_val);
+        pout[i] = e;
+        sum += e;
+    }
+    for (int64_t i = 0; i < n; ++i) {
+        pout[i] /= sum;
+    }
+    return HBI_OK;
+}
+
+/* ── RMSNORM ─────────────────────────────────────────────────────────────────
+ * rms = sqrt(mean(x^2) + eps), out[i] = x[i] / rms * weight[i]; 1D, fp32. */
+static hbi_status cpu_rmsnorm_run(const hbi_kernel_args *args, hbi_kernel_workspace *ws) {
+    (void)ws;
+    hbi_status st = require_arity(args, 2, 1, "rmsnorm");
+    if (st != HBI_OK)
+        return st;
+    const hbi_tensor *x = args->inputs[0];
+    const hbi_tensor *weight = args->inputs[1];
+    hbi_tensor *out = args->outputs[0];
+    if ((st = require_contiguous(x, "rmsnorm.x")) != HBI_OK)
+        return st;
+    if ((st = require_contiguous(weight, "rmsnorm.weight")) != HBI_OK)
+        return st;
+    if ((st = require_contiguous(out, "rmsnorm.out")) != HBI_OK)
+        return st;
+    if (hbi_tensor_dtype(x) != HBI_DTYPE_FP32 || hbi_tensor_dtype(weight) != HBI_DTYPE_FP32 ||
+        hbi_tensor_dtype(out) != HBI_DTYPE_FP32) {
+        return HBI_ERR_SET(HBI_ERR_UNSUPPORTED, 0, "rmsnorm: fp32 only (reference kernel)");
+    }
+    if (!hbi_shape_equal(hbi_tensor_shape(x), hbi_tensor_shape(weight)) ||
+        !hbi_shape_equal(hbi_tensor_shape(x), hbi_tensor_shape(out))) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "rmsnorm: shape mismatch");
+    }
+    int64_t n = 0;
+    if ((st = elem_count(x, &n)) != HBI_OK)
+        return st;
+    if (n == 0)
+        return HBI_OK;
+
+    const float *px = (const float *)hbi_tensor_cdata(x);
+    const float *pw = (const float *)hbi_tensor_cdata(weight);
+    float *pout = (float *)hbi_tensor_data_mut(out);
+
+    float sum_sq = 0.0f;
+    for (int64_t i = 0; i < n; ++i) {
+        sum_sq += px[i] * px[i];
+    }
+    float mean_sq = sum_sq / (float)n;
+    float eps = 1e-5f;
+    float rms_inv = 1.0f / sqrtf(mean_sq + eps);
+    for (int64_t i = 0; i < n; ++i) {
+        pout[i] = (px[i] * rms_inv) * pw[i];
+    }
+    return HBI_OK;
+}
+
+/* ── ROPE ────────────────────────────────────────────────────────────────────
+ * x: [seq_len, num_heads, head_dim], out: same shape. fp32.
+ * fill_value holds position offset. theta = 10000.0f */
+static hbi_status cpu_rope_run(const hbi_kernel_args *args, hbi_kernel_workspace *ws) {
+    (void)ws;
+    hbi_status st = require_arity(args, 1, 1, "rope");
+    if (st != HBI_OK)
+        return st;
+    const hbi_tensor *in = args->inputs[0];
+    hbi_tensor *out = args->outputs[0];
+    if ((st = require_contiguous(in, "rope.in")) != HBI_OK)
+        return st;
+    if ((st = require_contiguous(out, "rope.out")) != HBI_OK)
+        return st;
+    if (hbi_tensor_dtype(in) != HBI_DTYPE_FP32 || hbi_tensor_dtype(out) != HBI_DTYPE_FP32) {
+        return HBI_ERR_SET(HBI_ERR_UNSUPPORTED, 0, "rope: fp32 only (reference kernel)");
+    }
+    const hbi_shape *shape = hbi_tensor_shape(in);
+    if (!hbi_shape_equal(shape, hbi_tensor_shape(out))) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "rope: shape mismatch");
+    }
+    if (shape->rank != 3) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0,
+                           "rope: expected rank-3 tensor [seq_len, num_heads, head_dim]");
+    }
+    int64_t seq_len = shape->dims[0];
+    int64_t num_heads = shape->dims[1];
+    int64_t head_dim = shape->dims[2];
+    if (head_dim % 2 != 0) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "rope: head_dim must be even");
+    }
+
+    uint32_t pos_offset = (uint32_t)args->params.u.fill_value;
+    const float *pin = (const float *)hbi_tensor_cdata(in);
+    float *pout = (float *)hbi_tensor_data_mut(out);
+    float theta = 10000.0f;
+
+    for (int64_t s = 0; s < seq_len; ++s) {
+        float pos = (float)(s + pos_offset);
+        for (int64_t h = 0; h < num_heads; ++h) {
+            const float *hin = pin + s * (num_heads * head_dim) + h * head_dim;
+            float *hout = pout + s * (num_heads * head_dim) + h * head_dim;
+            for (int64_t d = 0; d < head_dim; d += 2) {
+                float freq = pos / powf(theta, (float)d / (float)head_dim);
+                float cos_f = cosf(freq);
+                float sin_f = sinf(freq);
+                float x0 = hin[d];
+                float x1 = hin[d + 1];
+                hout[d] = x0 * cos_f - x1 * sin_f;
+                hout[d + 1] = x0 * sin_f + x1 * cos_f;
+            }
+        }
+    }
+    return HBI_OK;
+}
+
+/* ── ACTIVATION ──────────────────────────────────────────────────────────────
+ * out[i] = act(in[i]); gelu/silu/relu; 1D contiguous, fp32. */
+static hbi_status cpu_activation_run(const hbi_kernel_args *args, hbi_kernel_workspace *ws) {
+    (void)ws;
+    hbi_status st = require_arity(args, 1, 1, "activation");
+    if (st != HBI_OK)
+        return st;
+    const hbi_tensor *in = args->inputs[0];
+    hbi_tensor *out = args->outputs[0];
+    if ((st = require_contiguous(in, "activation.in")) != HBI_OK)
+        return st;
+    if ((st = require_contiguous(out, "activation.out")) != HBI_OK)
+        return st;
+    if (hbi_tensor_dtype(in) != HBI_DTYPE_FP32 || hbi_tensor_dtype(out) != HBI_DTYPE_FP32) {
+        return HBI_ERR_SET(HBI_ERR_UNSUPPORTED, 0, "activation: fp32 only");
+    }
+    if (!hbi_shape_equal(hbi_tensor_shape(in), hbi_tensor_shape(out))) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "activation: shape mismatch");
+    }
+    int64_t n = 0;
+    if ((st = elem_count(in, &n)) != HBI_OK)
+        return st;
+
+    const float *pin = (const float *)hbi_tensor_cdata(in);
+    float *pout = (float *)hbi_tensor_data_mut(out);
+
+    switch (args->params.u.activation) {
+    case HBI_ACTIVATION_SILU:
+        for (int64_t i = 0; i < n; ++i) {
+            float x = pin[i];
+            pout[i] = x / (1.0f + expf(-x));
+        }
+        return HBI_OK;
+    case HBI_ACTIVATION_GELU:
+        for (int64_t i = 0; i < n; ++i) {
+            float x = pin[i];
+            float cdf = 0.5f * (1.0f + tanhf(0.7978845608f * (x + 0.044715f * x * x * x)));
+            pout[i] = x * cdf;
+        }
+        return HBI_OK;
+    case HBI_ACTIVATION_RELU:
+        for (int64_t i = 0; i < n; ++i) {
+            float x = pin[i];
+            pout[i] = x > 0.0f ? x : 0.0f;
+        }
+        return HBI_OK;
+    default:
+        return HBI_ERR_SETF(HBI_ERR_INVALID_ARG, 0, "activation: unknown kind %d",
+                            (int)args->params.u.activation);
+    }
+}
+
+/* ── BATCHED_MATMUL ──────────────────────────────────────────────────────────
+ * C[B,M,N] = A[B,M,K] * B[B,K,N]; rank-3 contiguous fp32. */
+static hbi_status cpu_batched_matmul_run(const hbi_kernel_args *args, hbi_kernel_workspace *ws) {
+    (void)ws;
+    hbi_status st = require_arity(args, 2, 1, "batched_matmul");
+    if (st != HBI_OK)
+        return st;
+    const hbi_tensor *A = args->inputs[0];
+    const hbi_tensor *B = args->inputs[1];
+    hbi_tensor *C = args->outputs[0];
+    if ((st = require_contiguous(A, "batched_matmul.A")) != HBI_OK)
+        return st;
+    if ((st = require_contiguous(B, "batched_matmul.B")) != HBI_OK)
+        return st;
+    if ((st = require_contiguous(C, "batched_matmul.C")) != HBI_OK)
+        return st;
+    if (hbi_tensor_dtype(A) != HBI_DTYPE_FP32 || hbi_tensor_dtype(B) != HBI_DTYPE_FP32 ||
+        hbi_tensor_dtype(C) != HBI_DTYPE_FP32) {
+        return HBI_ERR_SET(HBI_ERR_UNSUPPORTED, 0, "batched_matmul: fp32 only");
+    }
+    const hbi_shape *sa = hbi_tensor_shape(A);
+    const hbi_shape *sb = hbi_tensor_shape(B);
+    const hbi_shape *sc = hbi_tensor_shape(C);
+    if (sa->rank != 3 || sb->rank != 3 || sc->rank != 3) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "batched_matmul: operands must be rank-3");
+    }
+    int64_t batch = sa->dims[0];
+    if (sb->dims[0] != batch || sc->dims[0] != batch) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "batched_matmul: batch size mismatch");
+    }
+    int64_t M = sa->dims[1];
+    int64_t K = sa->dims[2];
+    int64_t N = sb->dims[2];
+    if (sb->dims[1] != K) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "batched_matmul: inner dim mismatch");
+    }
+    if (sc->dims[1] != M || sc->dims[2] != N) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "batched_matmul: output shape mismatch");
+    }
+
+    const float *pa = (const float *)hbi_tensor_cdata(A);
+    const float *pb = (const float *)hbi_tensor_cdata(B);
+    float *pc = (float *)hbi_tensor_data_mut(C);
+
+    for (int64_t b = 0; b < batch; ++b) {
+        const float *a_batch = pa + b * M * K;
+        const float *b_batch = pb + b * K * N;
+        float *c_batch = pc + b * M * N;
+        for (int64_t i = 0; i < M; ++i) {
+            for (int64_t j = 0; j < N; ++j) {
+                float acc = 0.0f;
+                for (int64_t k = 0; k < K; ++k) {
+                    acc += a_batch[i * K + k] * b_batch[k * N + j];
+                }
+                c_batch[i * N + j] = acc;
+            }
+        }
+    }
+    return HBI_OK;
+}
+
+/* ── REDUCE ──────────────────────────────────────────────────────────────────
+ * out[0] = reduce(in); flat contiguous fp32. */
+static hbi_status cpu_reduce_run(const hbi_kernel_args *args, hbi_kernel_workspace *ws) {
+    (void)ws;
+    hbi_status st = require_arity(args, 1, 1, "reduce");
+    if (st != HBI_OK)
+        return st;
+    const hbi_tensor *in = args->inputs[0];
+    hbi_tensor *out = args->outputs[0];
+    if ((st = require_contiguous(in, "reduce.in")) != HBI_OK)
+        return st;
+    if ((st = require_contiguous(out, "reduce.out")) != HBI_OK)
+        return st;
+    if (hbi_tensor_dtype(in) != HBI_DTYPE_FP32 || hbi_tensor_dtype(out) != HBI_DTYPE_FP32) {
+        return HBI_ERR_SET(HBI_ERR_UNSUPPORTED, 0, "reduce: fp32 only");
+    }
+    int64_t n = 0;
+    if ((st = elem_count(in, &n)) != HBI_OK)
+        return st;
+    int64_t out_n = 0;
+    if ((st = elem_count(out, &out_n)) != HBI_OK)
+        return st;
+    if (out_n != 1) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "reduce: output must be scalar (1 element)");
+    }
+
+    const float *pin = (const float *)hbi_tensor_cdata(in);
+    float *pout = (float *)hbi_tensor_data_mut(out);
+    if (n == 0) {
+        pout[0] = 0.0f;
+        return HBI_OK;
+    }
+
+    switch (args->params.u.reduce) {
+    case HBI_REDUCE_SUM: {
+        float sum = 0.0f;
+        for (int64_t i = 0; i < n; ++i)
+            sum += pin[i];
+        pout[0] = sum;
+        return HBI_OK;
+    }
+    case HBI_REDUCE_MAX: {
+        float max_val = pin[0];
+        for (int64_t i = 1; i < n; ++i) {
+            if (pin[i] > max_val)
+                max_val = pin[i];
+        }
+        pout[0] = max_val;
+        return HBI_OK;
+    }
+    default:
+        return HBI_ERR_SETF(HBI_ERR_INVALID_ARG, 0, "reduce: unknown kind %d",
+                            (int)args->params.u.reduce);
+    }
+}
+
 /* ── Descriptors + registration ──────────────────────────────────────────────
  * Dtype sets are static (the registry stores the pointer, not a copy). */
 static const hbi_dtype k_byte_dtypes[] = {HBI_DTYPE_FP32, HBI_DTYPE_INT8};
@@ -461,6 +779,66 @@ static const hbi_kernel k_cpu_kernels[] = {
         .layout_flags = HBI_KERNEL_LAYOUT_ANY,
         .workspace_size = NULL,
         .run = cpu_matmul_run,
+    },
+    {
+        .op = HBI_KERNEL_OP_SOFTMAX,
+        .name = "cpu.softmax.fp32",
+        .device = HBI_TENSOR_DEVICE_CPU,
+        .supported_dtypes = k_fp32_only,
+        .num_dtypes = 1u,
+        .layout_flags = HBI_KERNEL_LAYOUT_ANY,
+        .workspace_size = NULL,
+        .run = cpu_softmax_run,
+    },
+    {
+        .op = HBI_KERNEL_OP_RMSNORM,
+        .name = "cpu.rmsnorm.fp32",
+        .device = HBI_TENSOR_DEVICE_CPU,
+        .supported_dtypes = k_fp32_only,
+        .num_dtypes = 1u,
+        .layout_flags = HBI_KERNEL_LAYOUT_ANY,
+        .workspace_size = NULL,
+        .run = cpu_rmsnorm_run,
+    },
+    {
+        .op = HBI_KERNEL_OP_ROPE,
+        .name = "cpu.rope.fp32",
+        .device = HBI_TENSOR_DEVICE_CPU,
+        .supported_dtypes = k_fp32_only,
+        .num_dtypes = 1u,
+        .layout_flags = HBI_KERNEL_LAYOUT_ANY,
+        .workspace_size = NULL,
+        .run = cpu_rope_run,
+    },
+    {
+        .op = HBI_KERNEL_OP_ACTIVATION,
+        .name = "cpu.activation.fp32",
+        .device = HBI_TENSOR_DEVICE_CPU,
+        .supported_dtypes = k_fp32_only,
+        .num_dtypes = 1u,
+        .layout_flags = HBI_KERNEL_LAYOUT_ANY,
+        .workspace_size = NULL,
+        .run = cpu_activation_run,
+    },
+    {
+        .op = HBI_KERNEL_OP_BATCHED_MATMUL,
+        .name = "cpu.batched_matmul.fp32",
+        .device = HBI_TENSOR_DEVICE_CPU,
+        .supported_dtypes = k_fp32_only,
+        .num_dtypes = 1u,
+        .layout_flags = HBI_KERNEL_LAYOUT_ANY,
+        .workspace_size = NULL,
+        .run = cpu_batched_matmul_run,
+    },
+    {
+        .op = HBI_KERNEL_OP_REDUCE,
+        .name = "cpu.reduce.fp32",
+        .device = HBI_TENSOR_DEVICE_CPU,
+        .supported_dtypes = k_fp32_only,
+        .num_dtypes = 1u,
+        .layout_flags = HBI_KERNEL_LAYOUT_ANY,
+        .workspace_size = NULL,
+        .run = cpu_reduce_run,
     },
 };
 
