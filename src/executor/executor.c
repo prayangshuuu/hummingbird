@@ -86,6 +86,9 @@ hbi_status hbi_exec_context_allocate_internals(hbi_exec_context *ctx, const hbi_
         ctx->pools = hbi_aligned_alloc(64, sizeof(void *) * num_pools);
         if (!ctx->pools)
             return HBI_ERR_SET(HBI_ERR_OOM, 0, "failed to allocate pool array");
+        /* hbi_aligned_alloc doesn't zero memory; destroy() frees every slot up
+         * to num_pools, so unfilled slots must not be left as garbage. */
+        memset(ctx->pools, 0, sizeof(void *) * num_pools);
         ctx->num_pools = num_pools;
 
         for (uint32_t i = 0; i < num_pools; ++i) {

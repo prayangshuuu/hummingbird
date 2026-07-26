@@ -180,6 +180,29 @@ static void test_debug_canaries_and_leaks(void) {
     HBI_CHECK(!hbi_mem_debug_enabled());
 }
 
+static void test_debug_toggle_across_free(void) {
+    /* A block allocated with debug mode ON must still be correctly untracked
+     * if debug mode is OFF by the time it's freed. */
+    hbi_mem_debug_set_enabled(true);
+    hbi_allocator *a = hbi_allocator_system();
+    void *p = hbi_alloc(a, 32, 0, HBI_MEM_GENERAL);
+    HBI_CHECK(p != NULL);
+
+    hbi_mem_debug_set_enabled(false);
+    hbi_free(a, p); /* freed while debug mode is OFF */
+
+    hbi_mem_debug_set_enabled(true);
+    HBI_CHECK_EQ_INT(hbi_mem_check_leaks(), HBI_OK); /* must not still be tracked as live */
+
+    /* A fresh debug-mode allocation right after must not touch stale state. */
+    void *q = hbi_alloc(a, 16, 0, HBI_MEM_GENERAL);
+    HBI_CHECK(q != NULL);
+    hbi_free(a, q);
+    HBI_CHECK_EQ_INT(hbi_mem_check_leaks(), HBI_OK);
+
+    hbi_mem_debug_set_enabled(false);
+}
+
 static void test_identity(void) {
     HBI_CHECK_EQ_INT(hbi_memory_selftest(), HBI_OK);
     HBI_CHECK_STR_EQ(hbi_memory_name(), "memory");
@@ -195,6 +218,7 @@ int main(void) {
     HBI_RUN(test_arena);
     HBI_RUN(test_arena_large_alignment);
     HBI_RUN(test_debug_canaries_and_leaks);
+    HBI_RUN(test_debug_toggle_across_free);
     HBI_RUN(test_identity);
     return HBI_TEST_END();
 }

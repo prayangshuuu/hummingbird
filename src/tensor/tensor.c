@@ -24,7 +24,9 @@ static bool mul_ovf_i64(int64_t a, int64_t b, int64_t *out) {
         *out = 0;
         return true;
     }
-    int64_t r = a * b;
+    /* Unsigned multiply: well-defined wrap-around, no UB on overflow. */
+    uint64_t ur = (uint64_t)a * (uint64_t)b;
+    int64_t r = (int64_t)ur;
     if (r / a != b) {
         return false;
     }

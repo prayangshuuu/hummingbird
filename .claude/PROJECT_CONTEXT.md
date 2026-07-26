@@ -7,7 +7,7 @@
 > the **same change** that alters architecture, code, roadmap, or benchmarks.
 >
 > - **Document status:** Living document.
-> - **Last updated:** 2026-07-24
+> - **Last updated:** 2026-07-26
 > - **Project phase:** `PHASE 9 — First End-to-End Model (RFC-015 GPT-OSS Integration)`.
 >   Phases 1–8 are done; the GPT-OSS Model Adapter is now implemented:
 >   architecture parser, graph builder, config parser, and weight mapping.
@@ -1357,7 +1357,10 @@ vocabulary hash table, UTF-8 utilities, and mock tokenizer.
 
 # 10. Known Issues
 
-- **Bugs:** none open. **Fixed 2026-07-21:** the bump `arena` allocator
+- **Bugs:** none open. **Fixed 2026-07-26** (PR #2, DD-035):
+  OOM/error-handling audit across `executor`, `planner`, `scheduler`, `tensor`,
+  `memory`. Five bugs fixed — see DD-035 for full details.
+  **Fixed 2026-07-21:** the bump `arena` allocator
   (`src/memory/memory.c`) aligned the bare byte *offset* instead of the absolute
   `base+offset` *address*. Because the backing block carries only the parent
   allocator's natural alignment (~16 B), any request for a larger alignment could
@@ -1525,6 +1528,12 @@ repository**. If you find it stale, fixing it is the first task.
 - **Context:** The core philosophy shifts from fitting a model into memory to placing cold/warm/hot weights intelligently across 4 tiers (CPU Cache, RAM, VRAM, NVMe SSD). This subsystem defines Hummingbird.
 - **Chosen:** Implemented the Hierarchical Streaming Engine in `src/stream/`. It provides a Hierarchical Memory Manager, an Adaptive Cache with pluggable policies (LRU, LFU, ARC), a Residency Manager, an Expert Locality Tracker, and a Prefetch Engine.
 - **Tradeoffs:** Correctness and generic adaptivity are prioritized over model-specific or hardware-specific heuristics. Advanced predictive prefetching is deferred until real-world statistics guide it.
+
+### DD-035 — OOM and Error Handling Audit (2026-07-26) `[FIXED]`
+- **Problem:** Silent failures, memory leaks, and undefined behavior on allocation-failure paths across `executor`, `planner`, `scheduler`, `tensor`, and `memory`.
+- **Context:** Under real OOM conditions the executor freed garbage pointers, the planner silently produced size-0 allocations, the scheduler leaked all prior structures, the tensor overflow check itself invoked UB, and the memory debug canary was gated on a global flag that could flip between alloc and free.
+- **Chosen:** Fixed all five bugs with targeted regression tests: OOM fault-injection sweep for scheduler, partial-pool-failure regression for executor, overflow-rejection test for planner, debug-toggle test for memory, and an unsigned-multiply fix in `mul_ovf_i64`.
+- **Tradeoffs:** None — strictly more correct with no behavior change for well-resourced callers.
 
 ---
 

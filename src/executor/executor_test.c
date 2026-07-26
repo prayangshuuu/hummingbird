@@ -83,10 +83,48 @@ static void test_executor_simple(void) {
     hbi_graph_destroy(g);
 }
 
+/* Regression: ctx->num_pools was set before the alloc loop; unfilled slots
+ * contained garbage, so destroy() freed arbitrary addresses. */
+static void test_allocate_internals_oom_partial_pool_failure(void) {
+    hbi_graph_builder *b = NULL;
+    ASSERT_OK(hbi_graph_builder_create(&b), "create builder");
+
+    /* 1<<50 fp32 elements (~4.5 PB) on a copy output, not the input directly
+     * — the planner never pools plain inputs — so pool 0's alloc fails. */
+    int64_t dims[] = {(int64_t)1 << 50};
+    hbi_shape s;
+    ASSERT_OK(hbi_shape_init(&s, dims, 1), "shape init");
+    uint32_t in_id;
+    ASSERT_OK(hbi_graph_add_input(b, "input", &s, HBI_DTYPE_FP32, &in_id), "add input");
+    uint32_t out_id;
+    ASSERT_OK(hbi_graph_add_node(b, "copy", HBI_KERNEL_OP_COPY, NULL, &in_id, 1, &out_id, 1),
+              "add copy node");
+
+    hbi_graph *g = NULL;
+    ASSERT_OK(hbi_graph_build(b, &g), "build graph");
+
+    hbi_exec_context *ctx = NULL;
+    ASSERT_OK(hbi_exec_context_create(g, hbi_allocator_system(), &ctx), "create context");
+
+    hbi_memory_planner *planner = NULL;
+    ASSERT_OK(hbi_memory_planner_create(g, &planner), "create planner");
+
+    hbi_memory_plan *plan = NULL;
+    ASSERT_OK(hbi_memory_planner_plan(planner, &plan), "plan");
+
+    hbi_status st = hbi_exec_context_allocate_internals(ctx, plan);
+    ASSERT(st == HBI_ERR_OOM, "huge pool allocation must fail with OOM, not succeed or crash");
+
+    hbi_exec_context_destroy(ctx); /* must not crash with any unfilled pool slot */
+    hbi_memory_planner_destroy(planner);
+    hbi_graph_destroy(g);
+}
+
 int main(void) {
     ASSERT_OK(hbi_executor_selftest(), "selftest");
 
     test_executor_simple();
+    test_allocate_internals_oom_partial_pool_failure();
 
     printf("[ok] executor\n");
     return 0;

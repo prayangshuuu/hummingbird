@@ -79,37 +79,50 @@ hbi_status hbi_scheduler_create_plan(hbi_scheduler *scheduler, const hbi_graph *
     if (num_nodes == 0)
         return HBI_ERR_INVALID_ARG;
 
-    hbi_execution_plan *plan =
-        (hbi_execution_plan *)hbi_alloc(scheduler->allocator, sizeof(*plan), 0, HBI_MEM_GENERAL);
+    hbi_allocator *alloc = scheduler->allocator;
+    hbi_status status = HBI_ERR_OOM;
+
+    /* All pointers declared up front, zeroed, so `goto fail` is always safe
+     * regardless of which allocation below it fails on. */
+    hbi_execution_plan *plan = NULL;
+    hbi_task_graph tg = {0};
+    uint32_t *out_edge_capacity = NULL;
+    hbi_task_queue q = {0};
+    uint32_t *sorted_order = NULL;
+    uint32_t sorted_count = 0;
+    uint32_t max_depth = 0;
+
+    plan = (hbi_execution_plan *)hbi_alloc(alloc, sizeof(*plan), 0, HBI_MEM_GENERAL);
     if (!plan)
-        return HBI_ERR_OOM;
+        goto fail;
     memset(plan, 0, sizeof(*plan));
 
     plan->num_tasks = num_nodes;
-    plan->tasks = (hbi_task *)hbi_alloc(scheduler->allocator, sizeof(hbi_task) * num_nodes, 0,
-                                        HBI_MEM_GENERAL);
-    if (!plan->tasks) {
-        hbi_free(scheduler->allocator, plan);
-        return HBI_ERR_OOM;
-    }
+    plan->tasks = (hbi_task *)hbi_alloc(alloc, sizeof(hbi_task) * num_nodes, 0, HBI_MEM_GENERAL);
+    if (!plan->tasks)
+        goto fail;
     memset(plan->tasks, 0, sizeof(hbi_task) * num_nodes);
 
-    hbi_task_graph tg = {0};
+    /* Each buffer is checked and zeroed right after its own allocation, not
+     * batched, so a sibling failing later never leaves fail: walking a
+     * pointer array (tg.out_edges) full of uninitialized garbage. */
     tg.num_tasks = num_nodes;
     tg.tasks = plan->tasks;
-    tg.num_out_edges = (uint32_t *)hbi_alloc(scheduler->allocator, sizeof(uint32_t) * num_nodes, 0,
-                                             HBI_MEM_GENERAL);
-    tg.out_edges = (uint32_t **)hbi_alloc(scheduler->allocator, sizeof(uint32_t *) * num_nodes, 0,
-                                          HBI_MEM_GENERAL);
-    tg.in_degree = (uint32_t *)hbi_alloc(scheduler->allocator, sizeof(uint32_t) * num_nodes, 0,
-                                         HBI_MEM_GENERAL);
-
-    if (!tg.num_out_edges || !tg.out_edges || !tg.in_degree) {
-        /* Cleanup on OOM omitted for brevity, but would go here */
-        return HBI_ERR_OOM;
-    }
+    tg.num_out_edges =
+        (uint32_t *)hbi_alloc(alloc, sizeof(uint32_t) * num_nodes, 0, HBI_MEM_GENERAL);
+    if (!tg.num_out_edges)
+        goto fail;
     memset(tg.num_out_edges, 0, sizeof(uint32_t) * num_nodes);
+
+    tg.out_edges =
+        (uint32_t **)hbi_alloc(alloc, sizeof(uint32_t *) * num_nodes, 0, HBI_MEM_GENERAL);
+    if (!tg.out_edges)
+        goto fail;
     memset(tg.out_edges, 0, sizeof(uint32_t *) * num_nodes);
+
+    tg.in_degree = (uint32_t *)hbi_alloc(alloc, sizeof(uint32_t) * num_nodes, 0, HBI_MEM_GENERAL);
+    if (!tg.in_degree)
+        goto fail;
     memset(tg.in_degree, 0, sizeof(uint32_t) * num_nodes);
 
     /* 1. Build Adjacency List (Edges) */
@@ -125,8 +138,10 @@ hbi_status hbi_scheduler_create_plan(hbi_scheduler *scheduler, const hbi_graph *
          * or precisely count them first. Let's precisely count. */
     }
 
-    uint32_t *out_edge_capacity = (uint32_t *)hbi_alloc(
-        scheduler->allocator, sizeof(uint32_t) * num_nodes, 0, HBI_MEM_GENERAL);
+    out_edge_capacity =
+        (uint32_t *)hbi_alloc(alloc, sizeof(uint32_t) * num_nodes, 0, HBI_MEM_GENERAL);
+    if (!out_edge_capacity)
+        goto fail;
     memset(out_edge_capacity, 0, sizeof(uint32_t) * num_nodes);
 
     /* Pass 1: Count outgoing edges */
@@ -145,12 +160,16 @@ hbi_status hbi_scheduler_create_plan(hbi_scheduler *scheduler, const hbi_graph *
     /* Allocate out_edges arrays and dependency arrays */
     for (uint32_t i = 0; i < num_nodes; ++i) {
         if (out_edge_capacity[i] > 0) {
-            tg.out_edges[i] = (uint32_t *)hbi_alloc(
-                scheduler->allocator, sizeof(uint32_t) * out_edge_capacity[i], 0, HBI_MEM_GENERAL);
+            tg.out_edges[i] = (uint32_t *)hbi_alloc(alloc, sizeof(uint32_t) * out_edge_capacity[i],
+                                                    0, HBI_MEM_GENERAL);
+            if (!tg.out_edges[i])
+                goto fail;
         }
         if (tg.in_degree[i] > 0) {
             plan->tasks[i].dependencies = (uint32_t *)hbi_alloc(
-                scheduler->allocator, sizeof(uint32_t) * tg.in_degree[i], 0, HBI_MEM_GENERAL);
+                alloc, sizeof(uint32_t) * tg.in_degree[i], 0, HBI_MEM_GENERAL);
+            if (!plan->tasks[i].dependencies)
+                goto fail;
         }
     }
 
@@ -169,9 +188,8 @@ hbi_status hbi_scheduler_create_plan(hbi_scheduler *scheduler, const hbi_graph *
     }
 
     /* 2. Kahn's Algorithm for Topological Sort & Cycle Detection */
-    hbi_task_queue q;
-    if (task_queue_init(scheduler->allocator, &q, num_nodes) != HBI_OK)
-        return HBI_ERR_OOM;
+    if (task_queue_init(alloc, &q, num_nodes) != HBI_OK)
+        goto fail;
 
     for (uint32_t i = 0; i < num_nodes; ++i) {
         if (tg.in_degree[i] == 0) {
@@ -179,17 +197,19 @@ hbi_status hbi_scheduler_create_plan(hbi_scheduler *scheduler, const hbi_graph *
         }
     }
 
-    uint32_t *sorted_order = (uint32_t *)hbi_alloc(
-        scheduler->allocator, sizeof(uint32_t) * num_nodes, 0, HBI_MEM_GENERAL);
-    uint32_t sorted_count = 0;
-    uint32_t max_depth = 0;
+    sorted_order = (uint32_t *)hbi_alloc(alloc, sizeof(uint32_t) * num_nodes, 0, HBI_MEM_GENERAL);
+    if (!sorted_order)
+        goto fail;
 
     /* To support future parallel stages, we group nodes popped at the same time into stages. */
     /* We can do a level-order traversal for strict staging. */
 
     plan->num_stages = 0;
-    plan->stages = (hbi_execution_stage *)hbi_alloc(
-        scheduler->allocator, sizeof(hbi_execution_stage) * num_nodes, 0, HBI_MEM_GENERAL);
+    plan->stages = (hbi_execution_stage *)hbi_alloc(alloc, sizeof(hbi_execution_stage) * num_nodes,
+                                                    0, HBI_MEM_GENERAL);
+    if (!plan->stages)
+        goto fail;
+    memset(plan->stages, 0, sizeof(hbi_execution_stage) * num_nodes);
 
     while (q.count > 0) {
         uint32_t level_size = q.count;
@@ -197,8 +217,10 @@ hbi_status hbi_scheduler_create_plan(hbi_scheduler *scheduler, const hbi_graph *
         hbi_execution_stage *stage = &plan->stages[plan->num_stages];
         stage->stage_id = plan->num_stages;
         stage->num_tasks = level_size;
-        stage->tasks = (hbi_task **)hbi_alloc(scheduler->allocator, sizeof(hbi_task *) * level_size,
-                                              0, HBI_MEM_GENERAL);
+        stage->tasks =
+            (hbi_task **)hbi_alloc(alloc, sizeof(hbi_task *) * level_size, 0, HBI_MEM_GENERAL);
+        if (!stage->tasks)
+            goto fail;
         stage->completion_barrier.type = HBI_SYNC_BARRIER;
         stage->completion_barrier.sync_id = plan->num_stages;
 
@@ -221,12 +243,10 @@ hbi_status hbi_scheduler_create_plan(hbi_scheduler *scheduler, const hbi_graph *
         max_depth++;
     }
 
-    task_queue_destroy(scheduler->allocator, &q);
-
     if (sorted_count != num_nodes) {
-        /* Cycle detected */
-        /* Cleanup omitted for brevity */
-        return HBI_ERR_SETF(HBI_ERR_STATE, 0, "Cycle detected in execution graph");
+        /* Cycle detected: not every task could be scheduled. */
+        status = HBI_ERR_SETF(HBI_ERR_STATE, 0, "Cycle detected in execution graph");
+        goto fail;
     }
 
     /* Calculate Statistics */
@@ -236,19 +256,54 @@ hbi_status hbi_scheduler_create_plan(hbi_scheduler *scheduler, const hbi_graph *
     plan->stats.dependency_depth = max_depth;
     plan->stats.estimated_memory_usage = 0;
 
-    /* Cleanup TG structures */
-    hbi_free(scheduler->allocator, out_edge_capacity);
+    /* Success: release the scratch structures the plan doesn't own. */
+    task_queue_destroy(alloc, &q);
+    hbi_free(alloc, out_edge_capacity);
     for (uint32_t i = 0; i < num_nodes; ++i) {
         if (tg.out_edges[i])
-            hbi_free(scheduler->allocator, tg.out_edges[i]);
+            hbi_free(alloc, tg.out_edges[i]);
     }
-    hbi_free(scheduler->allocator, tg.out_edges);
-    hbi_free(scheduler->allocator, tg.num_out_edges);
-    hbi_free(scheduler->allocator, tg.in_degree);
-    hbi_free(scheduler->allocator, sorted_order);
+    hbi_free(alloc, tg.out_edges);
+    hbi_free(alloc, tg.num_out_edges);
+    hbi_free(alloc, tg.in_degree);
+    hbi_free(alloc, sorted_order);
 
     *out_plan = plan;
     return HBI_OK;
+
+fail:
+    /* Everything below is either still NULL or was zeroed right after its
+     * own allocation, so a plain NULL check is always safe here. */
+    task_queue_destroy(alloc, &q);
+    hbi_free(alloc, sorted_order);
+    hbi_free(alloc, out_edge_capacity);
+    if (tg.out_edges) {
+        for (uint32_t i = 0; i < num_nodes; ++i) {
+            if (tg.out_edges[i])
+                hbi_free(alloc, tg.out_edges[i]);
+        }
+        hbi_free(alloc, tg.out_edges);
+    }
+    hbi_free(alloc, tg.num_out_edges);
+    hbi_free(alloc, tg.in_degree);
+    if (plan) {
+        if (plan->stages) {
+            for (uint32_t i = 0; i < plan->num_stages; ++i) {
+                if (plan->stages[i].tasks)
+                    hbi_free(alloc, plan->stages[i].tasks);
+            }
+            hbi_free(alloc, plan->stages);
+        }
+        if (plan->tasks) {
+            for (uint32_t i = 0; i < num_nodes; ++i) {
+                if (plan->tasks[i].dependencies)
+                    hbi_free(alloc, plan->tasks[i].dependencies);
+            }
+            hbi_free(alloc, plan->tasks);
+        }
+        hbi_free(alloc, plan);
+    }
+    return status;
 }
 
 void hbi_execution_plan_destroy(hbi_scheduler *scheduler, hbi_execution_plan *plan) {

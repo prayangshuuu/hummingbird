@@ -132,14 +132,23 @@ hbi_status hbi_memory_planner_plan(hbi_memory_planner *planner, hbi_memory_plan 
 
     /* Collect ranges that need allocation */
     hbi_live_range *active_ranges = calloc(num_values, sizeof(hbi_live_range));
+    if (!active_ranges && num_values > 0) {
+        return HBI_ERR_OOM;
+    }
     uint32_t active_count = 0;
 
     for (uint32_t vid = 0; vid < num_values; ++vid) {
         const hbi_value *val = hbi_graph_value_at(planner->graph, vid);
         int64_t elems = 0;
-        hbi_shape_elem_count(&val->shape, &elems);
+        hbi_status st = hbi_shape_elem_count(&val->shape, &elems);
         size_t bytes = 0;
-        hbi_dtype_packed_nbytes(val->dtype, elems, &bytes);
+        if (st == HBI_OK) {
+            st = hbi_dtype_packed_nbytes(val->dtype, elems, &bytes);
+        }
+        if (st != HBI_OK) {
+            free(active_ranges);
+            return st;
+        }
 
         size_t alignment = hbi_dtype_align(val->dtype);
         if (alignment < HBI_TENSOR_DEFAULT_ALIGN) {

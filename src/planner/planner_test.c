@@ -2,6 +2,7 @@
 #include "planner/planner.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define ASSERT(cond, msg)                                                                          \
     do {                                                                                           \
@@ -70,10 +71,39 @@ static void test_planner_linear(void) {
     hbi_graph_destroy(g);
 }
 
+/* Verify planner propagates byte-count overflow errors from hbi_dtype_packed_nbytes
+ * instead of silently returning size 0. */
+static void test_planner_rejects_overflowing_tensor_size(void) {
+    hbi_graph_builder *b = NULL;
+    ASSERT_OK(hbi_graph_builder_create(&b), "create builder");
+
+    hbi_shape huge_shape;
+    memset(&huge_shape, 0, sizeof(huge_shape));
+    huge_shape.rank = 1;
+    huge_shape.dims[0] = (int64_t)1 << 60;
+
+    uint32_t in_id;
+    ASSERT_OK(hbi_graph_add_input(b, "huge", &huge_shape, HBI_DTYPE_FP32, &in_id), "add input");
+
+    hbi_graph *g = NULL;
+    ASSERT_OK(hbi_graph_build(b, &g), "build graph");
+
+    hbi_memory_planner *planner = NULL;
+    ASSERT_OK(hbi_memory_planner_create(g, &planner), "create planner");
+
+    hbi_memory_plan *plan = NULL;
+    hbi_status st = hbi_memory_planner_plan(planner, &plan);
+    ASSERT(st != HBI_OK, "overflowing tensor size must be rejected, not silently sized as 0");
+
+    hbi_memory_planner_destroy(planner);
+    hbi_graph_destroy(g);
+}
+
 int main(void) {
     ASSERT_OK(hbi_planner_selftest(), "selftest");
 
     test_planner_linear();
+    test_planner_rejects_overflowing_tensor_size();
 
     printf("[ok] planner\n");
     return 0;

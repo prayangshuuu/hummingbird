@@ -280,9 +280,10 @@ static void sys_free(void *ctx, void *ptr) {
         return;
     }
     sys_header *h = sys_header_of(ptr);
-    bool debug = atomic_load_explicit(&g_debug_enabled, memory_order_relaxed);
 
-    if (debug && h->canary == HBI_CANARY_HEAD) {
+    /* Gate on the block's own recorded state, not the current global flag:
+     * debug mode may be toggled off between this block's alloc and free. */
+    if (h->canary == HBI_CANARY_HEAD) {
         /* Validate red zones; a mismatch means overflow/underflow occurred. */
         if (*tail_canary_ptr(h) != HBI_CANARY_TAIL) {
             HBI_ERR_SET(HBI_ERR_CORRUPT, 0, "sys_free: trailing canary corrupt (buffer overflow)");
