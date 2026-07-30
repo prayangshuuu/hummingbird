@@ -51,9 +51,10 @@ static void test_cache_manager(void) {
 
 static void test_scheduler(void) {
     size_t capacities[HB_TIER_COUNT] = {1024, 1024, 8192, 0};
-    hbi_memory_manager_t *mm = hbi_memory_manager_create(capacities);
-    hbi_cache_manager_t *cache = hbi_cache_manager_create(HB_CACHE_POLICY_LRU, 1024);
-    hbi_scheduler_t *sched = hbi_scheduler_create(mm, cache);
+    hbi_stream_engine_t *engine = hbi_stream_engine_create(capacities, HB_CACHE_POLICY_LRU, 1024);
+    assert(engine != NULL);
+
+    hbi_scheduler_t *sched = hbi_scheduler_create(engine);
     assert(sched != NULL);
 
     bool load_ok = hbi_scheduler_load(sched, 100, 512);
@@ -70,8 +71,7 @@ static void test_scheduler(void) {
     (void)load_ok3;
 
     hbi_scheduler_destroy(sched);
-    hbi_cache_manager_destroy(cache);
-    hbi_memory_manager_destroy(mm);
+    hbi_stream_engine_destroy(engine);
     printf("[ok] scheduler\n");
 }
 

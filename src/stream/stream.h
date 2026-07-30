@@ -70,8 +70,19 @@ bool hbi_cache_manager_access(hbi_cache_manager_t *cache, hbi_block_id_t id);
 void hbi_cache_manager_insert(hbi_cache_manager_t *cache, hbi_block_id_t id);
 bool hbi_cache_manager_evict(hbi_cache_manager_t *cache, hbi_block_id_t *evicted_id);
 
+// Stream Engine
+typedef struct hbi_stream_engine_t hbi_stream_engine_t;
+
+hbi_stream_engine_t *hbi_stream_engine_create(size_t tier_capacities[HB_TIER_COUNT],
+                                              hbi_cache_policy_t policy, size_t cache_capacity);
+void hbi_stream_engine_destroy(hbi_stream_engine_t *engine);
+bool hbi_stream_engine_load(hbi_stream_engine_t *engine, hbi_block_id_t id, size_t size);
+bool hbi_stream_engine_unload(hbi_stream_engine_t *engine, hbi_block_id_t id);
+bool hbi_stream_engine_promote(hbi_stream_engine_t *engine, hbi_block_id_t id);
+bool hbi_stream_engine_demote(hbi_stream_engine_t *engine, hbi_block_id_t id);
+
 // Scheduler
-hbi_scheduler_t *hbi_scheduler_create(hbi_memory_manager_t *mm, hbi_cache_manager_t *cache);
+hbi_scheduler_t *hbi_scheduler_create(hbi_stream_engine_t *engine);
 void hbi_scheduler_destroy(hbi_scheduler_t *sched);
 bool hbi_scheduler_load(hbi_scheduler_t *sched, hbi_block_id_t id, size_t size);
 bool hbi_scheduler_unload(hbi_scheduler_t *sched, hbi_block_id_t id);
