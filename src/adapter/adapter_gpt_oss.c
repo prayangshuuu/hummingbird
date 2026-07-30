@@ -50,6 +50,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -276,6 +277,14 @@ static uint32_t ref_argmax(const float *logits, uint32_t vocab_size) {
 
 /* ── Forward pass ─────────────────────────────────────────────────────────── */
 
+/* Forward declarations for functions defined later in this file. */
+static hbi_status bind_weight_tensor(hbi_tensor *t, const void *data, hbi_dtype dtype,
+                                     const hbi_shape *shape);
+hbi_status hbi_adapter_gpt_oss_forward(gpt_oss_context *ctx, uint32_t token_id, uint32_t pos,
+                                       uint32_t *out_token);
+hbi_status hbi_adapter_gpt_oss_bind_weights(hbi_model_context *fctx, const char *name,
+                                            const void *data, const hbi_shape *shape);
+
 /* Run one forward pass for a single token at position `pos`.
  * The KV cache in `ctx` holds keys and values for positions [0, pos).
  * On success, the predicted next token ID is written to *out_token.
@@ -313,8 +322,25 @@ hbi_status hbi_adapter_gpt_oss_forward(gpt_oss_context *ctx, uint32_t token_id, 
     if (st != HBI_OK)
         return st;
 
-    float *k_cache = (float *)hbi_tensor_data_mut((hbi_tensor *)&page->k_tensor);
-    float *v_cache = (float *)hbi_tensor_data_mut((hbi_tensor *)&page->v_tensor);
+    /* Obtain mutable KV cache pointers. The page tensors are logically mutable
+     * (they are written to during attention), but hbi_kv_page stores const
+     * tensors because the manager does not mutate them itself. We create a
+     * temporary mutable view via hbi_tensor_wrap. */
+    hbi_tensor k_view;
+    hbi_tensor v_view;
+    const void *k_ro = hbi_tensor_cdata(&page->k_tensor);
+    const void *v_ro = hbi_tensor_cdata(&page->v_tensor);
+    /* The KV cache is filled during the forward pass; we need mutable access.
+     * The caller (runtime session) owns the KV backing memory and permits
+     * mutation. Cast away const here is intentional and documented. */
+    void *k_mut = (void *)(uintptr_t)k_ro; /* NOLINT: intentional, see above */
+    void *v_mut = (void *)(uintptr_t)v_ro; /* NOLINT: intentional, see above */
+    hbi_tensor_wrap(&k_view, page->k_tensor.dtype, &page->k_tensor.shape, k_mut,
+                    hbi_tensor_nbytes(&page->k_tensor));
+    hbi_tensor_wrap(&v_view, page->v_tensor.dtype, &page->v_tensor.shape, v_mut,
+                    hbi_tensor_nbytes(&page->v_tensor));
+    float *k_cache = (float *)hbi_tensor_data_mut(&k_view);
+    float *v_cache = (float *)hbi_tensor_data_mut(&v_view);
 
     /* Allocate attention scores scratch (kv_len = pos + 1). */
     uint32_t kv_len = pos + 1u;
@@ -705,7 +731,7 @@ static hbi_status gpt_oss_build_graph(const hbi_model_adapter *self, hbi_graph_b
     /* Input: token_ids — shape [1] (single token decode). */
     hbi_shape token_shape = {.rank = 1, .dims = {1}};
     uint32_t tok_id;
-    hbi_status st = hbi_graph_add_input(b, "token_ids", &token_shape, HBI_DTYPE_INT32, &tok_id);
+    hbi_status st = hbi_graph_add_input(b, "token_ids", &token_shape, HBI_DTYPE_INT8, &tok_id);
     if (st != HBI_OK)
         return st;
 
@@ -823,7 +849,7 @@ static hbi_status gpt_oss_register_tensors(const hbi_model_adapter *self,
     uint32_t L = desc->num_layers;
 
     /* Global tensors. */
-    const hbi_tensor_entry *e;
+    const hbi_tensor_entry *e = NULL;
     hbi_status st;
 
     st = require_tensor(m, "model.embed_tokens.weight", &e);
@@ -1135,7 +1161,12 @@ const hbi_model_adapter *hbi_adapter_gpt_oss_get(void) {
  * `tensor` is initialized as a borrowed view into `data`. */
 static hbi_status bind_weight_tensor(hbi_tensor *t, const void *data, hbi_dtype dtype,
                                      const hbi_shape *shape) {
-    return hbi_tensor_init_borrowed(t, dtype, shape, data);
+    int64_t n_elems = 0;
+    hbi_status st = hbi_shape_elem_count(shape, &n_elems);
+    if (st != HBI_OK)
+        return st;
+    size_t nbytes = (size_t)n_elems * ((size_t)hbi_dtype_bits(dtype) / 8u);
+    return hbi_tensor_wrap_readonly(t, dtype, shape, data, nbytes);
 }
 
 /* hbi_adapter_gpt_oss_bind_weights — bind raw weight buffers into a model context.

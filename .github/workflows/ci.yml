@@ -1,8 +1,14 @@
 # CI — build and test on Linux, macOS, and Windows (CPU-only).
 #
-# The bootstrap has no inference code; this proves the tree configures, builds
-# clean under -Werror, and passes CTest on all three tier-1 platforms. Backend
-# and sanitizer jobs are added as those subsystems land (see PROJECT_CONTEXT §6).
+# Five jobs:
+#   build-test   — Debug + Release on all three tier-1 platforms
+#   sanitizers   — ASan + UBSan (Linux/Ubuntu)
+#   tsan         — ThreadSanitizer (Linux/Ubuntu, catches data races)
+#   benchmarks   — CPU micro-benchmarks (Linux Release, results uploaded as artifact)
+#   static-analysis — clang-tidy warnings review (non-blocking on PRs, blocking on main)
+#
+# GPU backends (CUDA, Metal) require self-hosted runners and are not included
+# here. See docs/backends/cuda/SETUP.md and docs/backends/metal/SETUP.md.
 name: CI
 
 on:
@@ -16,6 +22,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Tier-1 platform matrix ──────────────────────────────────────────────────
   build-test:
     name: ${{ matrix.os }} / ${{ matrix.build_type }}
     runs-on: ${{ matrix.os }}
@@ -39,6 +46,7 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  # ── AddressSanitizer + UndefinedBehaviorSanitizer ──────────────────────────
   sanitizers:
     name: ubuntu / ASan+UBSan
     runs-on: ubuntu-latest
@@ -46,9 +54,81 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5
-      - name: Configure (sanitizers on)
+      - name: Configure (ASan + UBSan)
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DHB_ENABLE_ASAN=ON -DHB_ENABLE_UBSAN=ON
       - name: Build
         run: cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Upload sanitizer log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-logs
+          path: build/Testing/Temporary/LastTest.log
+          retention-days: 7
+
+  # ── ThreadSanitizer ─────────────────────────────────────────────────────────
+  # Catches data races in the thread pool, adapter registry, and KV manager.
+  # TSan is Linux-only (macOS TSan has known false positives with pthreads).
+  tsan:
+    name: ubuntu / ThreadSanitizer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+      - name: Configure (TSan)
+        # TSan requires -O1 or higher to suppress false positives from compiler
+        # reorderings; Debug with -O1 gives the right balance.
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="-O1 -fsanitize=thread -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+        env:
+          TSAN_OPTIONS: "halt_on_error=1 second_deadlock_stack=1"
+      - name: Upload TSan log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsan-logs
+          path: build/Testing/Temporary/LastTest.log
+          retention-days: 7
+
+  # ── CPU micro-benchmarks ────────────────────────────────────────────────────
+  # Builds and runs all benchmarks on a stable GitHub-hosted runner.
+  # Results are uploaded as a workflow artifact for historical comparison.
+  # Regressions must be investigated manually; this job does not fail on
+  # throughput changes (no baseline comparison yet — add a baseline file when
+  # one is committed to docs/benchmarks/).
+  benchmarks:
+    name: ubuntu / benchmarks (Release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+      - name: Configure (benchmarks enabled)
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DHB_BUILD_BENCHMARKS=ON
+      - name: Build
+        run: cmake --build build
+      - name: Run benchmarks
+        run: |
+          mkdir -p benchmark-results
+          for bench in build/benchmarks/bench_*; do
+            name=$(basename "$bench")
+            echo "=== $name ===" | tee -a benchmark-results/results.txt
+            "$bench" 2>&1 | tee -a benchmark-results/results.txt
+            echo "" >> benchmark-results/results.txt
+          done
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.run_id }}
+          path: benchmark-results/results.txt
+          retention-days: 90

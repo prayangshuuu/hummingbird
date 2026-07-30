@@ -9,6 +9,8 @@
 #include "config/config.h"
 #include "hbi_test.h"
 
+#include "platform/platform.h"
+#include <stdatomic.h>
 #include <stdio.h>
 
 /* A small but representative schema, terminated by a NULL-key sentinel. */
@@ -139,6 +141,45 @@ static void test_identity(void) {
     HBI_CHECK_STR_EQ(hbi_config_name(), "config");
 }
 
+/* ── Concurrent reads test ── */
+struct config_reader_args {
+    hbi_config *cfg;
+    atomic_int *failures;
+};
+
+static void reader_thread_fn(void *arg) {
+    struct config_reader_args *args = (struct config_reader_args *)arg;
+    int fails = 0;
+    for (int i = 0; i < 10000; i++) {
+        uint64_t val = hbi_config_get_uint(args->cfg, "runtime.threads", 0);
+        if (val != 42) {
+            fails++;
+        }
+    }
+    atomic_fetch_add(args->failures, fails);
+}
+
+static void test_concurrent_reads(void) {
+    hbi_config *cfg = NULL;
+    HBI_CHECK_EQ_INT(hbi_config_create(&cfg, k_schema), HBI_OK);
+    HBI_CHECK_EQ_INT(hbi_config_set_uint(cfg, "runtime.threads", 42), HBI_OK);
+
+    atomic_int failures = 0;
+    struct config_reader_args args = {cfg, &failures};
+
+    hbi_thread *threads[8];
+    for (int i = 0; i < 8; i++) {
+        HBI_CHECK_EQ_INT(hbi_thread_create(&threads[i], reader_thread_fn, &args), HBI_OK);
+    }
+
+    for (int i = 0; i < 8; i++) {
+        HBI_CHECK_EQ_INT(hbi_thread_join(threads[i]), HBI_OK);
+    }
+
+    HBI_CHECK_EQ_INT(atomic_load(&failures), 0);
+    hbi_config_destroy(cfg);
+}
+
 int main(void) {
     HBI_TEST_BEGIN("config");
     HBI_RUN(test_defaults);
@@ -148,5 +189,6 @@ int main(void) {
     HBI_RUN(test_missing_file_and_bad_schema);
     HBI_RUN(test_introspection);
     HBI_RUN(test_identity);
+    HBI_RUN(test_concurrent_reads);
     return HBI_TEST_END();
 }

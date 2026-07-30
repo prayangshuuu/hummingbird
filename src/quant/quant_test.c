@@ -122,6 +122,19 @@ static void test_bad_args(void) {
     HBI_CHECK(hbi_quant_dequantize_to_fp32(HBI_DTYPE_INT8, in, 1, NULL, out) != HBI_OK);
 }
 
+static void test_int8_not_implemented(void) {
+    int8_t in[1] = {5};
+    float out[1] = {0};
+
+    hbi_quant_meta meta;
+    memset(&meta, 0, sizeof(meta));
+    meta.scheme = HBI_QUANT_SCHEME_AFFINE_SYM;
+    meta.group_size = 32;
+
+    hbi_status st = hbi_quant_dequantize_to_fp32(HBI_DTYPE_INT8, in, 1, &meta, out);
+    HBI_CHECK(st == HBI_ERR_UNSUPPORTED);
+}
+
 static void test_selftest(void) {
     HBI_CHECK_EQ_INT(hbi_quant_selftest(), HBI_OK);
 }
@@ -136,6 +149,7 @@ int main(void) {
     HBI_RUN(test_mxfp4_values);
     HBI_RUN(test_mxfp4_validation_fails);
     HBI_RUN(test_bad_args);
+    HBI_RUN(test_int8_not_implemented);
     HBI_RUN(test_selftest);
     return HBI_TEST_END();
 }

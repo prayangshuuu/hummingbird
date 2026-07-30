@@ -15,3 +15,9 @@
 add_subdirectory(integration)
 add_subdirectory(property)
 add_subdirectory(e2e)
+
+# Fuzz targets are opt-in (require Clang + libFuzzer).
+option(HB_BUILD_FUZZ "Build libFuzzer fuzz targets (requires Clang)" OFF)
+if(HB_BUILD_FUZZ)
+    add_subdirectory(fuzz)
+endif()

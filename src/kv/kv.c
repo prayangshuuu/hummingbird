@@ -242,10 +242,99 @@ hbi_status hbi_kv_context_clone(hbi_kv_manager *manager, const hbi_context_handl
 
 hbi_status hbi_kv_context_resize(hbi_kv_manager *manager, hbi_context_handle *handle,
                                  uint32_t new_max_tokens) {
-    HB_UNUSED(manager);
-    HB_UNUSED(handle);
-    HB_UNUSED(new_max_tokens);
-    return HBI_ERR_SET(HBI_ERR_UNSUPPORTED, 0, "context resize: not yet implemented");
+    if (!manager || !handle) {
+        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "context resize: NULL args");
+    }
+
+    hbi_mutex_lock(manager->mutex);
+    uint32_t old_max = handle->state.max_tokens;
+
+    if (new_max_tokens == old_max) {
+        hbi_mutex_unlock(manager->mutex);
+        return HBI_OK;
+    }
+
+    if (new_max_tokens < old_max) {
+        /* Shrink: just update metadata */
+        handle->state.max_tokens = new_max_tokens;
+        if (handle->state.total_tokens > new_max_tokens) {
+            handle->state.total_tokens = new_max_tokens;
+        }
+        for (uint32_t i = 0; i < handle->state.num_pages; ++i) {
+            if (handle->pages[i].num_tokens > new_max_tokens) {
+                handle->pages[i].num_tokens = new_max_tokens;
+            }
+        }
+        hbi_mutex_unlock(manager->mutex);
+        return HBI_OK;
+    }
+
+    /* Grow: attempt reallocation */
+    hbi_shape new_k = handle->k_shape;
+    hbi_shape new_v = handle->v_shape;
+    for (uint32_t i = 0; i < new_k.rank; ++i) {
+        if (new_k.dims[i] == old_max)
+            new_k.dims[i] = new_max_tokens;
+    }
+    for (uint32_t i = 0; i < new_v.rank; ++i) {
+        if (new_v.dims[i] == old_max)
+            new_v.dims[i] = new_max_tokens;
+    }
+
+    hbi_kv_page *new_pages = NULL;
+    uint32_t new_num_pages = 0;
+    hbi_status st = manager->allocator->allocate(manager, new_max_tokens, handle->dtype, &new_k,
+                                                 &new_v, &new_pages, &new_num_pages);
+    if (st != HBI_OK) {
+        hbi_mutex_unlock(manager->mutex);
+        return st;
+    }
+
+    /* Copy old data */
+    for (uint32_t i = 0; i < handle->state.num_pages && i < new_num_pages; ++i) {
+        new_pages[i].num_tokens = handle->pages[i].num_tokens;
+        if (handle->pages[i].num_tokens > 0) {
+            hbi_tensor k_src_slice, k_dst_slice;
+            hbi_tensor v_src_slice, v_dst_slice;
+
+            hbi_tensor_slice(&handle->pages[i].k_tensor, 0, 0, handle->pages[i].num_tokens,
+                             &k_src_slice);
+            hbi_tensor_slice(&new_pages[i].k_tensor, 0, 0, handle->pages[i].num_tokens,
+                             &k_dst_slice);
+            hbi_tensor_copy_into(&k_src_slice, &k_dst_slice);
+
+            hbi_tensor_slice(&handle->pages[i].v_tensor, 0, 0, handle->pages[i].num_tokens,
+                             &v_src_slice);
+            hbi_tensor_slice(&new_pages[i].v_tensor, 0, 0, handle->pages[i].num_tokens,
+                             &v_dst_slice);
+            hbi_tensor_copy_into(&v_src_slice, &v_dst_slice);
+        }
+    }
+
+    /* Update memory stats */
+    size_t old_k_bytes = hbi_tensor_nbytes(&handle->pages[0].k_tensor);
+    size_t old_v_bytes = hbi_tensor_nbytes(&handle->pages[0].v_tensor);
+    size_t new_k_bytes = hbi_tensor_nbytes(&new_pages[0].k_tensor);
+    size_t new_v_bytes = hbi_tensor_nbytes(&new_pages[0].v_tensor);
+
+    manager->stats.current_memory_bytes -= (old_k_bytes + old_v_bytes) * handle->state.num_pages;
+    manager->stats.current_memory_bytes += (new_k_bytes + new_v_bytes) * new_num_pages;
+    if (manager->stats.current_memory_bytes > manager->stats.peak_memory_bytes) {
+        manager->stats.peak_memory_bytes = manager->stats.current_memory_bytes;
+    }
+
+    /* Free old */
+    manager->allocator->free(manager, handle->pages, handle->state.num_pages);
+
+    /* Update handle */
+    handle->pages = new_pages;
+    handle->state.num_pages = new_num_pages;
+    handle->state.max_tokens = new_max_tokens;
+    handle->k_shape = new_k;
+    handle->v_shape = new_v;
+
+    hbi_mutex_unlock(manager->mutex);
+    return HBI_OK;
 }
 
 hbi_status hbi_kv_context_get_state(const hbi_kv_manager *manager, const hbi_context_handle *handle,

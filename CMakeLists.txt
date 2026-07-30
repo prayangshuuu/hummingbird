@@ -5,12 +5,14 @@
 # See docs/architecture/05-build-system.md for the full design. This file wires
 # together: options → toolchain policy → the module tree (src/) → tests.
 #
-# PHASE 4: only scaffolding builds. No inference, kernels, or model loading yet.
+# PHASE 5: Core subsystems implemented (adapters, model loader, KV cache, graph,
+# scheduler, streaming engine). GPU backends (CUDA/Metal) are stubs pending
+# hardware integration. E2E inference is in progress (M1–M3).
 # ─────────────────────────────────────────────────────────────────────────────
 cmake_minimum_required(VERSION 3.20)
 
 project(Hummingbird
-    VERSION 0.0.0
+    VERSION 0.1.0
     DESCRIPTION "General-purpose inference runtime for large open-source LLMs"
     HOMEPAGE_URL "https://github.com/your-org/hummingbird"
     LANGUAGES C)
@@ -53,7 +55,7 @@ set(HB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
 # ── Options: what to build ───────────────────────────────────────────────────
 option(HB_BUILD_TESTS      "Build unit tests and register them with CTest" ON)
 option(HB_BUILD_EXAMPLES   "Build example programs"                        ON)
-option(HB_BUILD_BENCHMARKS "Build benchmarks"                              OFF)
+option(HB_BUILD_BENCHMARKS "Build benchmarks"                              ON)
 option(HB_BUILD_TOOLS      "Build offline tools (converter, oracle, ...)"  ON)
 option(HB_BUILD_FRONTENDS  "Build the hb CLI and server frontends"         ON)
 

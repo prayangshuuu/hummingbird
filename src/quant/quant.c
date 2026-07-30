@@ -152,7 +152,7 @@ hbi_status hbi_quant_dequantize_to_fp32(hbi_dtype src_dtype, const void *src, si
     case HBI_DTYPE_MXFP4:
         return dequant_mxfp4((const uint8_t *)src, n_elems, meta, dst);
     default:
-        return HBI_ERR_SETF(HBI_ERR_INVALID_ARG, 0, "dequant: unsupported dtype %s",
+        return HBI_ERR_SETF(HBI_ERR_UNSUPPORTED, 0, "dequant: unsupported dtype %s",
                             hbi_dtype_str(src_dtype));
     }
 }

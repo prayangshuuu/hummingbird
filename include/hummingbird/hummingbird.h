@@ -1,4 +1,4 @@
-﻿/* hummingbird.h — Stable public C ABI for libhummingbird.
+/* hummingbird.h — Stable public C ABI for libhummingbird.
  *
  * This is the ONLY header external embedders should include:
  *
@@ -11,8 +11,11 @@
  *     under the `hb_x_` prefix and carries no stability guarantee.
  *   - Internal engine symbols use the `hbi_` prefix and are never installed.
  *
- * Status: PHASE 4 bootstrap. Only version/status introspection is implemented;
- * model loading, contexts, and decoding are declared in later milestones.
+ * Status: v0.1.0-dev. Core subsystems are implemented (model loader, KV cache,
+ * adapter framework, graph/scheduler, streaming engine, CPU backend kernels).
+ * GPU backends (CUDA, Metal) are registered stubs pending hardware integration.
+ * End-to-end inference is under active development (milestone M1–M3).
+ * The stable ABI surface is intentionally minimal until inference is complete.
  */
 #ifndef HUMMINGBIRD_H
 #define HUMMINGBIRD_H
@@ -26,7 +29,7 @@ extern "C" {
 
 /* ── Semantic version of the library / ABI ─────────────────────────────── */
 #define HB_VERSION_MAJOR 0
-#define HB_VERSION_MINOR 0
+#define HB_VERSION_MINOR 1
 #define HB_VERSION_PATCH 0
 
 /* Packed integer form: MAJOR*10000 + MINOR*100 + PATCH. */

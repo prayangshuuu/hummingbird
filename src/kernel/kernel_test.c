@@ -235,6 +235,29 @@ static void test_register_collision(void) {
     hbi_kernel_registry_clear();
 }
 
+static void test_register_after_dispatch(void) {
+    hbi_kernel_registry_clear();
+    HBI_CHECK(hbi_kernel_register(&k_dummy_copy) == HBI_OK);
+
+    hbi_kernel_key key = {
+        .op = HBI_KERNEL_OP_COPY,
+        .device = HBI_TENSOR_DEVICE_CPU,
+        .dtype = HBI_DTYPE_FP32,
+        .layout_flags = HBI_KERNEL_LAYOUT_ANY,
+    };
+    const hbi_kernel *k = NULL;
+    HBI_CHECK(hbi_kernel_resolve(&key, &k) == HBI_OK);
+
+    /* Subsequent register should fail because dispatch has started */
+    HBI_CHECK(hbi_kernel_register(&k_dummy_fill) == HBI_ERR_STATE);
+
+    hbi_kernel_registry_clear();
+    /* After clear, register should succeed again */
+    HBI_CHECK(hbi_kernel_register(&k_dummy_fill) == HBI_OK);
+
+    hbi_kernel_registry_clear();
+}
+
 /* ── Resolve ─────────────────────────────────────────────────────────────── */
 
 static void test_resolve(void) {
@@ -423,6 +446,7 @@ int main(void) {
     HBI_RUN(test_register_and_query);
     HBI_RUN(test_register_validation);
     HBI_RUN(test_register_collision);
+    HBI_RUN(test_register_after_dispatch);
     HBI_RUN(test_resolve);
     HBI_RUN(test_resolve_layout_flags);
     HBI_RUN(test_dispatch_runs_kernel);

@@ -14,8 +14,8 @@
 
 #include "platform/platform.h"
 
+#include <stdatomic.h>
 #include <string.h>
-
 /* ── Op taxonomy ─────────────────────────────────────────────────────────── */
 
 const char *hbi_kernel_op_str(hbi_kernel_op op) {
@@ -161,6 +161,7 @@ void hbi_kernel_workspace_destroy(hbi_kernel_workspace *ws) {
 
 static const hbi_kernel *g_kernels[HBI_KERNEL_REGISTRY_MAX];
 static int g_kernel_count;
+static atomic_bool g_kernel_dispatched;
 
 /* Does an already-registered kernel collide with `k` on (op, device, dtype)?
  * Two kernels for the same op+device must not both claim the same dtype — that
@@ -183,6 +184,14 @@ static bool collides(const hbi_kernel *k) {
 }
 
 hbi_status hbi_kernel_register(const hbi_kernel *k) {
+    if (atomic_load_explicit(&g_kernel_dispatched, memory_order_relaxed)) {
+#if defined(HB_DEBUG) || !defined(NDEBUG)
+        return HBI_ERR_SET(HBI_ERR_STATE, 0,
+                           "kernel_register: cannot register after dispatch has started");
+#else
+        return HBI_ERR_STATE;
+#endif
+    }
     if (k == NULL || k->run == NULL || k->name == NULL) {
         return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "kernel_register: NULL kernel/run/name");
     }
@@ -210,6 +219,7 @@ hbi_status hbi_kernel_register(const hbi_kernel *k) {
 void hbi_kernel_registry_clear(void) {
     memset(g_kernels, 0, sizeof(g_kernels));
     g_kernel_count = 0;
+    atomic_store_explicit(&g_kernel_dispatched, false, memory_order_relaxed);
 }
 
 int hbi_kernel_registry_count(void) {
@@ -226,6 +236,7 @@ const hbi_kernel *hbi_kernel_at(int index) {
 /* ── Dispatch ────────────────────────────────────────────────────────────── */
 
 hbi_status hbi_kernel_resolve(const hbi_kernel_key *key, const hbi_kernel **out) {
+    atomic_store_explicit(&g_kernel_dispatched, true, memory_order_relaxed);
     if (key == NULL || out == NULL) {
         return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "kernel_resolve: NULL arg");
     }

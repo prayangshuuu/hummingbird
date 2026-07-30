@@ -497,6 +497,52 @@ static int test_selftest(void) {
     return 0;
 }
 
+#include "platform/platform.h"
+
+#define NUM_CONCURRENT_THREADS 4
+#define ADAPTERS_PER_THREAD 4
+
+static hbi_model_adapter g_concurrent_adapters[NUM_CONCURRENT_THREADS * ADAPTERS_PER_THREAD];
+static char g_concurrent_names[NUM_CONCURRENT_THREADS * ADAPTERS_PER_THREAD][32];
+
+static void concurrent_registration_worker(void *arg) {
+    int thread_idx = (int)(intptr_t)arg;
+    int start_idx = thread_idx * ADAPTERS_PER_THREAD;
+    const hbi_model_adapter *mock = hbi_adapter_mock_get();
+
+    for (int i = 0; i < ADAPTERS_PER_THREAD; i++) {
+        int idx = start_idx + i;
+        g_concurrent_adapters[idx] = *mock;
+        sprintf(g_concurrent_names[idx], "concurrent_%d", idx);
+        g_concurrent_adapters[idx].name = g_concurrent_names[idx];
+
+        hbi_adapter_register(&g_concurrent_adapters[idx]);
+    }
+}
+
+static int test_adapter_concurrent_registration(void) {
+    hbi_adapter_registry_clear();
+
+    hbi_thread *threads[NUM_CONCURRENT_THREADS] = {0};
+
+    for (int i = 0; i < NUM_CONCURRENT_THREADS; i++) {
+        hbi_status st =
+            hbi_thread_create(&threads[i], concurrent_registration_worker, (void *)(intptr_t)i);
+        ASSERT(st == HBI_OK, "thread create succeeds");
+    }
+
+    for (int i = 0; i < NUM_CONCURRENT_THREADS; i++) {
+        hbi_thread_join(threads[i]);
+    }
+
+    int count = hbi_adapter_count();
+    ASSERT(count == (NUM_CONCURRENT_THREADS * ADAPTERS_PER_THREAD),
+           "all adapters registered concurrently");
+
+    hbi_adapter_registry_clear();
+    return 0;
+}
+
 int main(void) {
     hbi_error_clear();
 
@@ -516,6 +562,7 @@ int main(void) {
     failures += test_adapter_resolve();
     failures += test_adapter_init_model_errors();
     failures += test_vtable_validation();
+    failures += test_adapter_concurrent_registration();
     failures += test_selftest();
 
     if (failures == 0) {

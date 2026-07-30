@@ -2,6 +2,8 @@
 #include "memory/memory.h"
 #include "model/model.h"
 #include "model/model_internal.h"
+#include "platform/platform.h"
+#include <stdatomic.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -452,6 +454,129 @@ static int test_safetensors_corrupt(void) {
     return 0;
 }
 
+static int test_manifest_overflow(void) {
+    hbi_model_manifest *m = NULL;
+    hbi_model_manifest_create(hbi_allocator_system(), &m);
+
+    /* a. byte_size = UINT64_MAX — should be rejected. */
+    hbi_tensor_entry bad;
+    memset(&bad, 0, sizeof(bad));
+    strncpy(bad.name, "giant_tensor", HBI_TENSOR_NAME_MAX - 1);
+    bad.dtype = HBI_DTYPE_FP32;
+    bad.byte_size = UINT64_MAX;
+    bad.shape.rank = 1;
+    bad.shape.dims[0] = 100;
+
+    ASSERT(hbi_model_manifest_add(m, &bad) != HBI_OK, "UINT64_MAX byte_size rejected on add");
+
+    /* b. shape.dims[0] that would cause overflow when byte_size is computed */
+    /* wait, we can just test if the loader validates shape vs byte_size. Let's do it */
+    memset(&bad, 0, sizeof(bad));
+    strncpy(bad.name, "shape_mismatch", HBI_TENSOR_NAME_MAX - 1);
+    bad.dtype = HBI_DTYPE_FP32;
+    bad.byte_size = 40; /* 10 floats */
+    bad.shape.rank = 1;
+    bad.shape.dims[0] =
+        (int64_t)(UINT64_MAX / 4) + 1; /* Giant shape that overflows if we multiply by 4 */
+
+    ASSERT(hbi_model_manifest_add(m, &bad) == HBI_OK, "manifest add shape_mismatch");
+    ASSERT(hbi_model_manifest_validate(m) != HBI_OK,
+           "shape mismatch with byte_size rejected on validate");
+    hbi_model_manifest_destroy(m);
+
+    return 0;
+}
+
+static int test_safetensors_overflow(void) {
+    hbi_format_handler_registry_clear();
+    ASSERT(hbi_format_safetensors_register() == HBI_OK, "register safetensors");
+
+    /* c. data_offsets in a safetensors file where end_offset - start_offset overflows a size_t */
+    /* Let's try 0 and UINT64_MAX, but as JSON numbers. Let's make end_offset just larger than
+     * SIZE_MAX (or close to UINT64_MAX) */
+    char json[256];
+    snprintf(json, sizeof(json),
+             "{\"w\":{\"dtype\":\"F32\",\"shape\":[1],\"data_offsets\":[0,%llu]}}",
+             (unsigned long long)UINT64_MAX);
+    const char *path = "test_tmp_overflow.safetensors";
+
+    FILE *f = fopen(path, "wb");
+    uint64_t hlen = (uint64_t)strlen(json);
+    uint8_t lenbuf[8];
+    for (int i = 0; i < 8; i++) {
+        lenbuf[i] = (uint8_t)((hlen >> (8 * i)) & 0xFFu);
+    }
+    fwrite(lenbuf, 1, 8, f);
+    fwrite(json, 1, (size_t)hlen, f);
+    fclose(f);
+
+    hbi_load_options opts;
+    memset(&opts, 0, sizeof(opts));
+    opts.model_path = path;
+
+    hbi_load_session *session = NULL;
+    hbi_status st = hbi_model_load(&opts, hbi_allocator_system(), &session);
+    ASSERT(st != HBI_OK, "reject overflow data_offsets");
+    if (session)
+        hbi_model_load_session_destroy(session);
+    remove(path);
+
+    return 0;
+}
+
+/* ── Concurrent load sessions test ── */
+struct model_loader_args {
+    const char *path;
+    atomic_int *failures;
+};
+
+static void loader_thread_fn(void *arg) {
+    struct model_loader_args *args = (struct model_loader_args *)arg;
+    hbi_load_options opts;
+    memset(&opts, 0, sizeof(opts));
+    opts.model_path = args->path;
+    opts.format_hint = HBI_MODEL_FORMAT_GGUF;
+
+    hbi_load_session *session = NULL;
+    hbi_status st = hbi_model_load(&opts, hbi_allocator_system(), &session);
+    if (st != HBI_OK || session == NULL) {
+        atomic_fetch_add(args->failures, 1);
+        return;
+    }
+
+    const hbi_model_manifest *m = hbi_load_session_manifest(session);
+    if (hbi_model_manifest_count(m) != 2) {
+        atomic_fetch_add(args->failures, 1);
+    }
+
+    hbi_model_load_session_destroy(session);
+}
+
+static int test_concurrent_load_sessions(void) {
+    hbi_format_handler_registry_clear();
+    hbi_format_handler_register(&g_mock_handler);
+
+    atomic_int failures = 0;
+    struct model_loader_args args[4];
+    const char *paths[4] = {"model1.mock", "model2.mock", "model3.mock", "model4.mock"};
+
+    hbi_thread *threads[4];
+    for (int i = 0; i < 4; i++) {
+        args[i].path = paths[i];
+        args[i].failures = &failures;
+        ASSERT(hbi_thread_create(&threads[i], loader_thread_fn, &args[i]) == HBI_OK,
+               "thread create");
+    }
+
+    for (int i = 0; i < 4; i++) {
+        ASSERT(hbi_thread_join(threads[i]) == HBI_OK, "thread join");
+    }
+
+    ASSERT(atomic_load(&failures) == 0, "no corruption in concurrent model load");
+    hbi_format_handler_registry_clear();
+    return 0;
+}
+
 int main(void) {
     hbi_error_clear();
 
@@ -466,6 +591,9 @@ int main(void) {
     failures += test_load_pipeline_errors();
     failures += test_safetensors_roundtrip();
     failures += test_safetensors_corrupt();
+    failures += test_manifest_overflow();
+    failures += test_safetensors_overflow();
+    failures += test_concurrent_load_sessions();
     failures += test_selftest();
 
     if (failures == 0) {

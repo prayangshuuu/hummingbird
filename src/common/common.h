@@ -111,7 +111,7 @@ int hbi_error_format(char *buf, size_t cap);
  * Bootstrap placeholder; the real version is injected by the build system
  * (see cmake/, project() version) once the ABI stabilizes. */
 #define HB_VERSION_MAJOR 0
-#define HB_VERSION_MINOR 0
+#define HB_VERSION_MINOR 1
 #define HB_VERSION_PATCH 0
 
 /* ── Portability helpers ─────────────────────────────────────────────────────

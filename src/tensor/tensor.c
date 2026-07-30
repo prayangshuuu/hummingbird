@@ -24,12 +24,20 @@ static bool mul_ovf_i64(int64_t a, int64_t b, int64_t *out) {
         *out = 0;
         return true;
     }
-    int64_t r = a * b;
-    if (r / a != b) {
+#if defined(__GNUC__) || defined(__clang__)
+    return !__builtin_mul_overflow(a, b, out);
+#else
+    if (a > 0 && b > 0 && a > INT64_MAX / b)
         return false;
-    }
-    *out = r;
+    if (a > 0 && b < 0 && b < INT64_MIN / a)
+        return false;
+    if (a < 0 && b > 0 && a < INT64_MIN / b)
+        return false;
+    if (a < 0 && b < 0 && a < INT64_MAX / b)
+        return false;
+    *out = a * b;
     return true;
+#endif
 }
 
 /* ── Data types ────────────────────────────────────────────────────────────── */

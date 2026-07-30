@@ -188,6 +188,10 @@ hbi_status hbi_model_manifest_add(hbi_model_manifest *manifest, const hbi_tensor
         return HBI_ERR_SETF(HBI_ERR_INVALID_ARG, 0, "manifest add: zero byte_size for '%s'",
                             entry->name);
     }
+    if (entry->byte_size >= SIZE_MAX) {
+        return HBI_ERR_SETF(HBI_ERR_INVALID_ARG, 0, "manifest add: byte_size too large for '%s'",
+                            entry->name);
+    }
     if (!hbi_dtype_is_valid(entry->dtype)) {
         return HBI_ERR_SETF(HBI_ERR_INVALID_ARG, 0, "manifest add: invalid dtype for '%s'",
                             entry->name);
@@ -259,6 +263,26 @@ hbi_status hbi_model_manifest_validate(const hbi_model_manifest *manifest) {
         if (st != HBI_OK) {
             return HBI_ERR_SETF(HBI_ERR_INVALID_ARG, 0, "manifest validate: '%s' has invalid shape",
                                 e->name);
+        }
+
+        int64_t count = 0;
+        st = hbi_shape_elem_count(&e->shape, &count);
+        if (st != HBI_OK) {
+            return HBI_ERR_SETF(HBI_ERR_INVALID_ARG, 0,
+                                "manifest validate: '%s' shape elements overflow", e->name);
+        }
+
+        size_t expected_bytes = 0;
+        st = hbi_dtype_packed_nbytes(e->dtype, count, &expected_bytes);
+        if (st != HBI_OK) {
+            return HBI_ERR_SETF(HBI_ERR_INVALID_ARG, 0,
+                                "manifest validate: '%s' shape size overflow", e->name);
+        }
+        if ((uint64_t)expected_bytes > e->byte_size) {
+            return HBI_ERR_SETF(
+                HBI_ERR_INVALID_ARG, 0,
+                "manifest validate: '%s' shape requires %zu bytes but only %llu available", e->name,
+                expected_bytes, (unsigned long long)e->byte_size);
         }
     }
     return HBI_OK;

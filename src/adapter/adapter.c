@@ -79,21 +79,27 @@ const char *hbi_adapter_architecture_str(hbi_adapter_architecture arch) {
 static const hbi_model_adapter *g_adapters[HBI_ADAPTER_REGISTRY_MAX];
 static int g_adapter_count = 0;
 
-static hbi_mutex *g_adapter_mutex = NULL;
-static atomic_bool g_adapter_mutex_ready = false;
+static _Atomic(hbi_mutex *) g_adapter_mutex = NULL;
 
 static hbi_mutex *adapter_mutex(void) {
-    if (atomic_load_explicit(&g_adapter_mutex_ready, memory_order_acquire)) {
-        return g_adapter_mutex;
+    hbi_mutex *m = atomic_load_explicit(&g_adapter_mutex, memory_order_acquire);
+    if (m != NULL) {
+        return m;
     }
-    if (g_adapter_mutex == NULL) {
-        hbi_mutex *m = NULL;
-        if (hbi_mutex_init(&m) == HBI_OK) {
-            g_adapter_mutex = m;
+
+    hbi_mutex *new_m = NULL;
+    if (hbi_mutex_init(&new_m) == HBI_OK) {
+        hbi_mutex *expected = NULL;
+        if (atomic_compare_exchange_strong_explicit(&g_adapter_mutex, &expected, new_m,
+                                                    memory_order_release, memory_order_acquire)) {
+            m = new_m;
+        } else {
+            /* Another thread beat us to it. Destroy ours and use theirs. */
+            hbi_mutex_destroy(new_m);
+            m = expected;
         }
     }
-    atomic_store_explicit(&g_adapter_mutex_ready, true, memory_order_release);
-    return g_adapter_mutex;
+    return m;
 }
 
 hbi_status hbi_adapter_register(const hbi_model_adapter *adapter) {
