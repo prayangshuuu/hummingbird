@@ -70,3 +70,4 @@ docs/architecture/
 *.onnx
 *.pt
 *.ckpt
+.claude/

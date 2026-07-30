@@ -424,9 +424,11 @@ static void test_manager_incremental_encode(void) {
 
     /* Incremental: send "He" then "llo". */
     void *encode_context = NULL;
-    HBI_CHECK(hbi_tokenizer_manager_encode_incremental(mgr, &encode_context, "He", 2u, seq) == HBI_OK);
+    HBI_CHECK(hbi_tokenizer_manager_encode_incremental(mgr, &encode_context, "He", 2u, seq) ==
+              HBI_OK);
     HBI_CHECK_EQ_INT(hbi_token_sequence_count(seq), 2u);
-    HBI_CHECK(hbi_tokenizer_manager_encode_incremental(mgr, &encode_context, "llo", 3u, seq) == HBI_OK);
+    HBI_CHECK(hbi_tokenizer_manager_encode_incremental(mgr, &encode_context, "llo", 3u, seq) ==
+              HBI_OK);
     HBI_CHECK_EQ_INT(hbi_token_sequence_count(seq), 5u);
 
     hbi_tokenizer_manager_free_context(mgr, encode_context);
@@ -453,19 +455,19 @@ static void test_manager_incremental_decode(void) {
     hbi_decode_state *state = NULL;
     HBI_CHECK(hbi_decode_state_create(&state, test_alloc()) == HBI_OK);
 
-    HBI_CHECK(hbi_tokenizer_manager_decode_incremental(mgr, state, 70u, out, sizeof(out), &out_len) ==
-              HBI_OK);
+    HBI_CHECK(hbi_tokenizer_manager_decode_incremental(mgr, state, 70u, out, sizeof(out),
+                                                       &out_len) == HBI_OK);
     HBI_CHECK_EQ_INT(out_len, 1u);
     HBI_CHECK_EQ_INT(out[0], 'A');
 
-    HBI_CHECK(hbi_tokenizer_manager_decode_incremental(mgr, state, 71u, out, sizeof(out), &out_len) ==
-              HBI_OK);
+    HBI_CHECK(hbi_tokenizer_manager_decode_incremental(mgr, state, 71u, out, sizeof(out),
+                                                       &out_len) == HBI_OK);
     HBI_CHECK_EQ_INT(out_len, 1u);
     HBI_CHECK_EQ_INT(out[0], 'B');
 
     /* Special token (ID 2 = BOS) should produce no output. */
-    HBI_CHECK(hbi_tokenizer_manager_decode_incremental(mgr, state, 2u, out, sizeof(out), &out_len) ==
-              HBI_OK);
+    HBI_CHECK(hbi_tokenizer_manager_decode_incremental(mgr, state, 2u, out, sizeof(out),
+                                                       &out_len) == HBI_OK);
     HBI_CHECK_EQ_INT(out_len, 0u);
 
     hbi_decode_state_destroy(state);
@@ -525,7 +527,8 @@ static void test_manager_reset(void) {
 
     /* Encode incrementally to create context. */
     void *encode_context = NULL;
-    HBI_CHECK(hbi_tokenizer_manager_encode_incremental(mgr, &encode_context, "x", 1u, seq) == HBI_OK);
+    HBI_CHECK(hbi_tokenizer_manager_encode_incremental(mgr, &encode_context, "x", 1u, seq) ==
+              HBI_OK);
     HBI_CHECK_EQ_INT(hbi_token_sequence_count(seq), 1u);
 
     /* Free should clear encode context. */

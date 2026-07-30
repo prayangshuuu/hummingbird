@@ -7,8 +7,8 @@
 
 #include "platform/platform.h"
 
-#include <stdbool.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <string.h>
 
 /* ── Enum string tables ────────────────────────────────────────────────── */
@@ -109,21 +109,25 @@ hbi_status hbi_adapter_register(const hbi_model_adapter *adapter) {
                            "adapter register: missing required vtable fields");
     }
     hbi_mutex *m = adapter_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     if (g_adapter_count >= (int)HBI_ADAPTER_REGISTRY_MAX) {
-        if (m) hbi_mutex_unlock(m);
+        if (m)
+            hbi_mutex_unlock(m);
         return HBI_ERR_SET(HBI_ERR_STATE, 0, "adapter registry is full");
     }
     /* Check for duplicate name. */
     for (int i = 0; i < g_adapter_count; ++i) {
         if (strcmp(g_adapters[i]->name, adapter->name) == 0) {
-            if (m) hbi_mutex_unlock(m);
+            if (m)
+                hbi_mutex_unlock(m);
             return HBI_ERR_SETF(HBI_ERR_STATE, 0, "adapter register: duplicate name '%s'",
                                 adapter->name);
         }
     }
     g_adapters[g_adapter_count++] = adapter;
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
     return HBI_OK;
 }
 
@@ -132,7 +136,8 @@ const hbi_model_adapter *hbi_adapter_find(const char *architecture_name) {
         return NULL;
     }
     hbi_mutex *m = adapter_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     const hbi_model_adapter *found = NULL;
     for (int i = 0; i < g_adapter_count; ++i) {
         if (strcmp(g_adapters[i]->name, architecture_name) == 0) {
@@ -140,13 +145,15 @@ const hbi_model_adapter *hbi_adapter_find(const char *architecture_name) {
             break;
         }
     }
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
     return found;
 }
 
 const hbi_model_adapter *hbi_adapter_find_by_arch(hbi_adapter_architecture arch) {
     hbi_mutex *m = adapter_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     const hbi_model_adapter *found = NULL;
     for (int i = 0; i < g_adapter_count; ++i) {
         if (g_adapters[i]->architecture == arch) {
@@ -154,24 +161,29 @@ const hbi_model_adapter *hbi_adapter_find_by_arch(hbi_adapter_architecture arch)
             break;
         }
     }
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
     return found;
 }
 
 int hbi_adapter_count(void) {
     hbi_mutex *m = adapter_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     int count = g_adapter_count;
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
     return count;
 }
 
 void hbi_adapter_registry_clear(void) {
     hbi_mutex *m = adapter_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     g_adapter_count = 0;
-    memset((void*)g_adapters, 0, sizeof(g_adapters));
-    if (m) hbi_mutex_unlock(m);
+    memset((void *)g_adapters, 0, sizeof(g_adapters));
+    if (m)
+        hbi_mutex_unlock(m);
 }
 
 /* ── Adapter lifecycle helpers ─────────────────────────────────────────── */

@@ -63,7 +63,7 @@ struct hbi_tokenizer_manager {
     const hbi_tokenizer *tokenizer;   /* borrowed from registry */
     const hbi_vocabulary *vocabulary; /* borrowed from caller */
     hbi_allocator *allocator;         /* borrowed */
-    
+
     _Atomic uint64_t encode_time_ns;
     _Atomic uint64_t decode_time_ns;
     _Atomic uint64_t tokens_encoded;
@@ -72,7 +72,7 @@ struct hbi_tokenizer_manager {
     _Atomic uint64_t encode_calls;
     _Atomic uint64_t decode_calls;
 
-    bool initialized;                 /* lifecycle guard */
+    bool initialized; /* lifecycle guard */
 };
 
 /* ── Mock tokenizer registration ──────────────────────────────────────────── */

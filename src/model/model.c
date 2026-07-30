@@ -53,21 +53,25 @@ hbi_status hbi_format_handler_register(const hbi_format_handler *handler) {
                            "format handler: NULL handler or missing required fields");
     }
     hbi_mutex *m = handler_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     if (g_handler_count >= HBI_FORMAT_HANDLER_MAX) {
-        if (m) hbi_mutex_unlock(m);
+        if (m)
+            hbi_mutex_unlock(m);
         return HBI_ERR_SET(HBI_ERR_STATE, 0, "format handler registry is full");
     }
     /* Check for duplicate format. */
     for (int i = 0; i < g_handler_count; ++i) {
         if (g_handlers[i]->format == handler->format) {
-            if (m) hbi_mutex_unlock(m);
+            if (m)
+                hbi_mutex_unlock(m);
             return HBI_ERR_SETF(HBI_ERR_STATE, 0, "format handler already registered for %s",
                                 hbi_model_format_str(handler->format));
         }
     }
     g_handlers[g_handler_count++] = handler;
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
     return HBI_OK;
 }
 
@@ -76,7 +80,8 @@ hbi_model_format hbi_format_handler_detect(const char *path) {
         return HBI_MODEL_FORMAT_UNKNOWN;
     }
     hbi_mutex *m = handler_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     hbi_model_format found = HBI_MODEL_FORMAT_UNKNOWN;
     for (int i = 0; i < g_handler_count; ++i) {
         if (g_handlers[i]->detect(path)) {
@@ -84,13 +89,15 @@ hbi_model_format hbi_format_handler_detect(const char *path) {
             break;
         }
     }
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
     return found;
 }
 
 const hbi_format_handler *hbi_format_handler_find(hbi_model_format format) {
     hbi_mutex *m = handler_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     const hbi_format_handler *found = NULL;
     for (int i = 0; i < g_handler_count; ++i) {
         if (g_handlers[i]->format == format) {
@@ -98,24 +105,29 @@ const hbi_format_handler *hbi_format_handler_find(hbi_model_format format) {
             break;
         }
     }
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
     return found;
 }
 
 int hbi_format_handler_count(void) {
     hbi_mutex *m = handler_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     int count = g_handler_count;
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
     return count;
 }
 
 void hbi_format_handler_registry_clear(void) {
     hbi_mutex *m = handler_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     g_handler_count = 0;
-    memset((void*)g_handlers, 0, sizeof(g_handlers));
-    if (m) hbi_mutex_unlock(m);
+    memset((void *)g_handlers, 0, sizeof(g_handlers));
+    if (m)
+        hbi_mutex_unlock(m);
 }
 
 /* ── Manifest ────────────────────────────────────────────────────────────── */

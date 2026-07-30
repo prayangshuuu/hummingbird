@@ -553,20 +553,24 @@ hbi_status hbi_tokenizer_register(const hbi_tokenizer *tokenizer) {
         return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "NULL tokenizer or missing required fields");
     }
     hbi_mutex *m = tokenizer_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     /* Check for duplicates. */
     for (uint32_t i = 0u; i < g_tokenizer_registry_count; i++) {
         if (strcmp(g_tokenizer_registry[i]->name, tokenizer->name) == 0) {
-            if (m) hbi_mutex_unlock(m);
+            if (m)
+                hbi_mutex_unlock(m);
             return HBI_ERR_SET(HBI_ERR_STATE, 0, "duplicate tokenizer name");
         }
     }
     if (g_tokenizer_registry_count >= HBI_TOKENIZER_REGISTRY_MAX) {
-        if (m) hbi_mutex_unlock(m);
+        if (m)
+            hbi_mutex_unlock(m);
         return HBI_ERR_SET(HBI_ERR_STATE, 0, "tokenizer registry full");
     }
     g_tokenizer_registry[g_tokenizer_registry_count++] = tokenizer;
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
     return HBI_OK;
 }
 
@@ -575,7 +579,8 @@ const hbi_tokenizer *hbi_tokenizer_find(const char *name) {
         return NULL;
     }
     hbi_mutex *m = tokenizer_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     const hbi_tokenizer *found = NULL;
     for (uint32_t i = 0u; i < g_tokenizer_registry_count; i++) {
         if (strcmp(g_tokenizer_registry[i]->name, name) == 0) {
@@ -583,23 +588,28 @@ const hbi_tokenizer *hbi_tokenizer_find(const char *name) {
             break;
         }
     }
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
     return found;
 }
 
 int hbi_tokenizer_count(void) {
     hbi_mutex *m = tokenizer_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     int count = (int)g_tokenizer_registry_count;
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
     return count;
 }
 
 void hbi_tokenizer_registry_clear(void) {
     hbi_mutex *m = tokenizer_mutex();
-    if (m) hbi_mutex_lock(m);
+    if (m)
+        hbi_mutex_lock(m);
     g_tokenizer_registry_count = 0u;
-    if (m) hbi_mutex_unlock(m);
+    if (m)
+        hbi_mutex_unlock(m);
 }
 
 /* ── Tokenizer manager ────────────────────────────────────────────────────── */
@@ -665,7 +675,8 @@ hbi_status hbi_tokenizer_manager_encode(const hbi_tokenizer_manager *manager, co
         hbi_tokenizer_manager *mut = (hbi_tokenizer_manager *)(uintptr_t)manager;
         atomic_fetch_add_explicit(&mut->encode_time_ns, (t1 - t0), memory_order_relaxed);
         atomic_fetch_add_explicit(&mut->encode_calls, 1, memory_order_relaxed);
-        atomic_fetch_add_explicit(&mut->tokens_encoded, (uint64_t)hbi_token_sequence_count(out_seq), memory_order_relaxed);
+        atomic_fetch_add_explicit(&mut->tokens_encoded, (uint64_t)hbi_token_sequence_count(out_seq),
+                                  memory_order_relaxed);
     }
     return st;
 }
@@ -687,15 +698,15 @@ hbi_status hbi_tokenizer_manager_decode(const hbi_tokenizer_manager *manager,
         hbi_tokenizer_manager *mut = (hbi_tokenizer_manager *)(uintptr_t)manager;
         atomic_fetch_add_explicit(&mut->decode_time_ns, (t1 - t0), memory_order_relaxed);
         atomic_fetch_add_explicit(&mut->decode_calls, 1, memory_order_relaxed);
-        atomic_fetch_add_explicit(&mut->tokens_decoded, (uint64_t)token_count, memory_order_relaxed);
+        atomic_fetch_add_explicit(&mut->tokens_decoded, (uint64_t)token_count,
+                                  memory_order_relaxed);
     }
     return st;
 }
 
 hbi_status hbi_tokenizer_manager_encode_incremental(const hbi_tokenizer_manager *manager,
-                                                    void **encode_context,
-                                                    const char *text, size_t text_len,
-                                                    hbi_token_sequence *out_seq) {
+                                                    void **encode_context, const char *text,
+                                                    size_t text_len, hbi_token_sequence *out_seq) {
     if (!manager || !text || !out_seq || !encode_context) {
         return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "NULL argument");
     }
@@ -710,9 +721,9 @@ hbi_status hbi_tokenizer_manager_encode_incremental(const hbi_tokenizer_manager 
 }
 
 hbi_status hbi_tokenizer_manager_decode_incremental(const hbi_tokenizer_manager *manager,
-                                                    hbi_decode_state *state,
-                                                    hbi_token_id token, char *out_text,
-                                                    size_t out_capacity, size_t *out_len) {
+                                                    hbi_decode_state *state, hbi_token_id token,
+                                                    char *out_text, size_t out_capacity,
+                                                    size_t *out_len) {
     if (!manager || !state || !out_text || !out_len) {
         return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "NULL argument");
     }
@@ -722,12 +733,12 @@ hbi_status hbi_tokenizer_manager_decode_incremental(const hbi_tokenizer_manager 
     if (!manager->tokenizer->decode_incremental) {
         return HBI_ERR_SET(HBI_ERR_UNSUPPORTED, 0, "incremental decode not supported");
     }
-    return manager->tokenizer->decode_incremental(
-        manager->tokenizer, manager->vocabulary, token,
-        state, out_text, out_capacity, out_len);
+    return manager->tokenizer->decode_incremental(manager->tokenizer, manager->vocabulary, token,
+                                                  state, out_text, out_capacity, out_len);
 }
 
-void hbi_tokenizer_manager_free_context(const hbi_tokenizer_manager *manager, void *encode_context) {
+void hbi_tokenizer_manager_free_context(const hbi_tokenizer_manager *manager,
+                                        void *encode_context) {
     if (!manager) {
         return;
     }
@@ -753,7 +764,8 @@ hbi_status hbi_tokenizer_manager_get_statistics(const hbi_tokenizer_manager *man
     out->decode_time_ns = atomic_load_explicit(&manager->decode_time_ns, memory_order_relaxed);
     out->tokens_encoded = atomic_load_explicit(&manager->tokens_encoded, memory_order_relaxed);
     out->tokens_decoded = atomic_load_explicit(&manager->tokens_decoded, memory_order_relaxed);
-    out->vocabulary_lookups = atomic_load_explicit(&manager->vocabulary_lookups, memory_order_relaxed);
+    out->vocabulary_lookups =
+        atomic_load_explicit(&manager->vocabulary_lookups, memory_order_relaxed);
     out->encode_calls = atomic_load_explicit(&manager->encode_calls, memory_order_relaxed);
     out->decode_calls = atomic_load_explicit(&manager->decode_calls, memory_order_relaxed);
     return HBI_OK;
