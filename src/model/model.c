@@ -6,7 +6,8 @@
 #include "model/model_internal.h"
 
 #include "platform/platform.h"
-
+#include <stdatomic.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ── Format string helpers ───────────────────────────────────────────────── */
@@ -29,22 +30,44 @@ const char *hbi_model_format_str(hbi_model_format fmt) {
 static const hbi_format_handler *g_handlers[HBI_FORMAT_HANDLER_MAX];
 static int g_handler_count = 0;
 
+static hbi_mutex *g_handler_mutex = NULL;
+static atomic_bool g_handler_mutex_ready = false;
+
+static hbi_mutex *handler_mutex(void) {
+    if (atomic_load_explicit(&g_handler_mutex_ready, memory_order_acquire)) {
+        return g_handler_mutex;
+    }
+    if (g_handler_mutex == NULL) {
+        hbi_mutex *m = NULL;
+        if (hbi_mutex_init(&m) == HBI_OK) {
+            g_handler_mutex = m;
+        }
+    }
+    atomic_store_explicit(&g_handler_mutex_ready, true, memory_order_release);
+    return g_handler_mutex;
+}
+
 hbi_status hbi_format_handler_register(const hbi_format_handler *handler) {
     if (!handler || !handler->name || !handler->detect || !handler->parse_metadata) {
         return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0,
                            "format handler: NULL handler or missing required fields");
     }
+    hbi_mutex *m = handler_mutex();
+    if (m) hbi_mutex_lock(m);
     if (g_handler_count >= HBI_FORMAT_HANDLER_MAX) {
+        if (m) hbi_mutex_unlock(m);
         return HBI_ERR_SET(HBI_ERR_STATE, 0, "format handler registry is full");
     }
     /* Check for duplicate format. */
     for (int i = 0; i < g_handler_count; ++i) {
         if (g_handlers[i]->format == handler->format) {
+            if (m) hbi_mutex_unlock(m);
             return HBI_ERR_SETF(HBI_ERR_STATE, 0, "format handler already registered for %s",
                                 hbi_model_format_str(handler->format));
         }
     }
     g_handlers[g_handler_count++] = handler;
+    if (m) hbi_mutex_unlock(m);
     return HBI_OK;
 }
 
@@ -52,30 +75,47 @@ hbi_model_format hbi_format_handler_detect(const char *path) {
     if (!path) {
         return HBI_MODEL_FORMAT_UNKNOWN;
     }
+    hbi_mutex *m = handler_mutex();
+    if (m) hbi_mutex_lock(m);
+    hbi_model_format found = HBI_MODEL_FORMAT_UNKNOWN;
     for (int i = 0; i < g_handler_count; ++i) {
         if (g_handlers[i]->detect(path)) {
-            return g_handlers[i]->format;
+            found = g_handlers[i]->format;
+            break;
         }
     }
-    return HBI_MODEL_FORMAT_UNKNOWN;
+    if (m) hbi_mutex_unlock(m);
+    return found;
 }
 
-const hbi_format_handler *hbi_format_handler_find(hbi_model_format fmt) {
+const hbi_format_handler *hbi_format_handler_find(hbi_model_format format) {
+    hbi_mutex *m = handler_mutex();
+    if (m) hbi_mutex_lock(m);
+    const hbi_format_handler *found = NULL;
     for (int i = 0; i < g_handler_count; ++i) {
-        if (g_handlers[i]->format == fmt) {
-            return g_handlers[i];
+        if (g_handlers[i]->format == format) {
+            found = g_handlers[i];
+            break;
         }
     }
-    return NULL;
+    if (m) hbi_mutex_unlock(m);
+    return found;
 }
 
 int hbi_format_handler_count(void) {
-    return g_handler_count;
+    hbi_mutex *m = handler_mutex();
+    if (m) hbi_mutex_lock(m);
+    int count = g_handler_count;
+    if (m) hbi_mutex_unlock(m);
+    return count;
 }
 
 void hbi_format_handler_registry_clear(void) {
+    hbi_mutex *m = handler_mutex();
+    if (m) hbi_mutex_lock(m);
     g_handler_count = 0;
-    memset(g_handlers, 0, sizeof(g_handlers));
+    memset((void*)g_handlers, 0, sizeof(g_handlers));
+    if (m) hbi_mutex_unlock(m);
 }
 
 /* ── Manifest ────────────────────────────────────────────────────────────── */

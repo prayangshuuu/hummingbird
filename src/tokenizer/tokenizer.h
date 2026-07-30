@@ -264,16 +264,18 @@ hbi_status hbi_tokenizer_manager_decode(const hbi_tokenizer_manager *manager,
 
 /* Incremental encode (streaming). */
 hbi_status hbi_tokenizer_manager_encode_incremental(const hbi_tokenizer_manager *manager,
+                                                    void **encode_context,
                                                     const char *text, size_t text_len,
                                                     hbi_token_sequence *out_seq);
 
 /* Incremental decode (one token at a time). */
 hbi_status hbi_tokenizer_manager_decode_incremental(const hbi_tokenizer_manager *manager,
+                                                    hbi_decode_state *state,
                                                     hbi_token_id token, char *out_text,
                                                     size_t out_capacity, size_t *out_len);
 
-/* Reset the manager's streaming state (encode context + decode state). */
-void hbi_tokenizer_manager_reset(hbi_tokenizer_manager *manager);
+/* Free an encode context previously allocated by encode_incremental. */
+void hbi_tokenizer_manager_free_context(const hbi_tokenizer_manager *manager, void *encode_context);
 
 /* Accessors. */
 const hbi_vocabulary *hbi_tokenizer_manager_vocabulary(const hbi_tokenizer_manager *manager);

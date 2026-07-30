@@ -11,6 +11,7 @@
 #include "platform/platform.h"
 #include "tokenizer/tokenizer.h"
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -62,9 +63,15 @@ struct hbi_tokenizer_manager {
     const hbi_tokenizer *tokenizer;   /* borrowed from registry */
     const hbi_vocabulary *vocabulary; /* borrowed from caller */
     hbi_allocator *allocator;         /* borrowed */
-    void *encode_context;             /* incremental encode state (tokenizer-owned) */
-    hbi_decode_state *decode_state;   /* incremental decode state */
-    hbi_tokenizer_statistics stats;   /* cumulative statistics */
+    
+    _Atomic uint64_t encode_time_ns;
+    _Atomic uint64_t decode_time_ns;
+    _Atomic uint64_t tokens_encoded;
+    _Atomic uint64_t tokens_decoded;
+    _Atomic uint64_t vocabulary_lookups;
+    _Atomic uint64_t encode_calls;
+    _Atomic uint64_t decode_calls;
+
     bool initialized;                 /* lifecycle guard */
 };
 

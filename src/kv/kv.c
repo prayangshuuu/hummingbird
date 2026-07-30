@@ -75,6 +75,11 @@ hbi_status hbi_kv_manager_create(hbi_allocator *base_allocator,
     mgr->base_allocator = base_allocator;
     mgr->allocator = kv_alloc_override ? kv_alloc_override : &g_contiguous_allocator;
 
+    if (hbi_mutex_init(&mgr->mutex) != HBI_OK) {
+        hbi_free(base_allocator, mgr);
+        return HBI_ERR_SET(HBI_ERR_OOM, 0, "manager create: mutex init failed");
+    }
+
     *out_manager = mgr;
     return HBI_OK;
 }
@@ -84,12 +89,16 @@ void hbi_kv_manager_destroy(hbi_kv_manager *manager) {
         return;
 
     /* Destroy any lingering contexts */
-    for (uint32_t i = 0; i < manager->num_contexts; ++i) {
+    hbi_mutex_lock(manager->mutex);
+    uint32_t count = manager->num_contexts;
+    hbi_mutex_unlock(manager->mutex);
+    for (uint32_t i = 0; i < count; ++i) {
         if (manager->contexts[i]) {
             hbi_kv_context_destroy(manager, manager->contexts[i]);
         }
     }
 
+    hbi_mutex_destroy(manager->mutex);
     hbi_free(manager->base_allocator, manager);
 }
 
@@ -98,7 +107,9 @@ hbi_status hbi_kv_manager_get_statistics(const hbi_kv_manager *manager,
     if (!manager || !out_stats) {
         return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "manager stats: NULL args");
     }
+    hbi_mutex_lock(manager->mutex);
     *out_stats = manager->stats;
+    hbi_mutex_unlock(manager->mutex);
     return HBI_OK;
 }
 
@@ -110,9 +121,12 @@ hbi_status hbi_kv_context_create(hbi_kv_manager *manager, uint32_t max_tokens, h
     if (!manager || !k_shape || !v_shape || !out_handle) {
         return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "context create: NULL args");
     }
+    hbi_mutex_lock(manager->mutex);
     if (manager->num_contexts >= HBI_KV_MAX_CONTEXTS) {
+        hbi_mutex_unlock(manager->mutex);
         return HBI_ERR_SET(HBI_ERR_OOM, 0, "context create: max contexts reached");
     }
+    hbi_mutex_unlock(manager->mutex);
 
     hbi_context_handle *ctx = (hbi_context_handle *)hbi_alloc(
         manager->base_allocator, sizeof(hbi_context_handle), 8, HBI_MEM_GENERAL);
@@ -134,23 +148,23 @@ hbi_status hbi_kv_context_create(hbi_kv_manager *manager, uint32_t max_tokens, h
     ctx->k_shape = *k_shape;
     ctx->v_shape = *v_shape;
 
-    /* Add to manager */
+    /* Add to manager and update stats */
+    hbi_mutex_lock(manager->mutex);
     manager->contexts[manager->num_contexts++] = ctx;
 
-    /* Update stats */
     manager->stats.active_contexts++;
     if (manager->stats.active_contexts > manager->stats.peak_contexts) {
         manager->stats.peak_contexts = manager->stats.active_contexts;
     }
     manager->stats.total_allocations++;
 
-    /* Calculate rough memory byte size */
     size_t k_bytes = hbi_tensor_nbytes(&ctx->pages[0].k_tensor);
     size_t v_bytes = hbi_tensor_nbytes(&ctx->pages[0].v_tensor);
     manager->stats.current_memory_bytes += (k_bytes + v_bytes) * ctx->state.num_pages;
     if (manager->stats.current_memory_bytes > manager->stats.peak_memory_bytes) {
         manager->stats.peak_memory_bytes = manager->stats.current_memory_bytes;
     }
+    hbi_mutex_unlock(manager->mutex);
 
     *out_handle = ctx;
     return HBI_OK;
@@ -160,14 +174,14 @@ void hbi_kv_context_destroy(hbi_kv_manager *manager, hbi_context_handle *handle)
     if (!manager || !handle)
         return;
 
-    /* Subtract memory stats */
+    /* Subtract memory stats and remove from manager array */
+    hbi_mutex_lock(manager->mutex);
     size_t k_bytes = hbi_tensor_nbytes(&handle->pages[0].k_tensor);
     size_t v_bytes = hbi_tensor_nbytes(&handle->pages[0].v_tensor);
     manager->stats.current_memory_bytes -= (k_bytes + v_bytes) * handle->state.num_pages;
     manager->stats.active_contexts--;
     manager->stats.total_frees++;
 
-    /* Remove from manager array */
     for (uint32_t i = 0; i < manager->num_contexts; ++i) {
         if (manager->contexts[i] == handle) {
             manager->contexts[i] = manager->contexts[manager->num_contexts - 1];
@@ -175,6 +189,7 @@ void hbi_kv_context_destroy(hbi_kv_manager *manager, hbi_context_handle *handle)
             break;
         }
     }
+    hbi_mutex_unlock(manager->mutex);
 
     manager->allocator->free(manager, handle->pages, handle->state.num_pages);
     hbi_free(manager->base_allocator, handle);
@@ -208,9 +223,18 @@ hbi_status hbi_kv_context_clone(hbi_kv_manager *manager, const hbi_context_handl
 
     for (uint32_t i = 0; i < src->state.num_pages; ++i) {
         dst->pages[i].num_tokens = src->pages[i].num_tokens;
-        /* Copy tensor memory */
-        hbi_tensor_copy_into(&src->pages[i].k_tensor, &dst->pages[i].k_tensor);
-        hbi_tensor_copy_into(&src->pages[i].v_tensor, &dst->pages[i].v_tensor);
+        if (src->pages[i].num_tokens > 0) {
+            hbi_tensor k_src_slice, k_dst_slice;
+            hbi_tensor v_src_slice, v_dst_slice;
+
+            hbi_tensor_slice(&src->pages[i].k_tensor, 0, 0, src->pages[i].num_tokens, &k_src_slice);
+            hbi_tensor_slice(&dst->pages[i].k_tensor, 0, 0, src->pages[i].num_tokens, &k_dst_slice);
+            hbi_tensor_copy_into(&k_src_slice, &k_dst_slice);
+
+            hbi_tensor_slice(&src->pages[i].v_tensor, 0, 0, src->pages[i].num_tokens, &v_src_slice);
+            hbi_tensor_slice(&dst->pages[i].v_tensor, 0, 0, src->pages[i].num_tokens, &v_dst_slice);
+            hbi_tensor_copy_into(&v_src_slice, &v_dst_slice);
+        }
     }
 
     return HBI_OK;

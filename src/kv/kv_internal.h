@@ -7,6 +7,7 @@
 #define HB_KV_INTERNAL_H
 
 #include "kv/kv.h"
+#include "platform/platform.h"
 
 /* ── Context Handle ──────────────────────────────────────────────────────── */
 
@@ -30,6 +31,7 @@ struct hbi_kv_manager {
     /* Active context handles */
     hbi_context_handle *contexts[HBI_KV_MAX_CONTEXTS];
     uint32_t num_contexts;
+    hbi_mutex *mutex;
 };
 
 /* ── Built-in Contiguous Allocator ───────────────────────────────────────── */
