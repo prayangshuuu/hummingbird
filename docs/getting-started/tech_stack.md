@@ -1,0 +1,1 @@
+Pure C + CMake; timing uses the platform abstraction `hbi_time_monotonic_ns()` / `hbi_time_wall_ns()`. Kernel workloads exercise the scalar reference kernels in `backends/cpu` as the M2 floor for later SIMD/IDOT optimisations.

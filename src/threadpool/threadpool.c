@@ -16,6 +16,7 @@
  *     decremented after the task returns), so `wait` blocks until it hits zero.
  *   - The pool never calls exit()/abort(): a bad task is the caller's contract.
  */
+/* Concurrency: Production Ready */
 #include "threadpool/threadpool_internal.h"
 
 #include "platform/platform.h"

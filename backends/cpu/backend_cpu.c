@@ -1,3 +1,4 @@
+/* CPU Backend: Production Ready */
 /* backend_cpu.c — the always-present reference backend.
  *
  * The CPU backend is the correctness baseline: it is always compiled, always

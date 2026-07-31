@@ -219,6 +219,78 @@ test_runtime/fast:
 	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/test_runtime.dir/build.make src/runtime/CMakeFiles/test_runtime.dir/build
 .PHONY : test_runtime/fast
 
+executor.o: executor.c.o
+.PHONY : executor.o
+
+# target to build an object file
+executor.c.o:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/executor.c.o
+.PHONY : executor.c.o
+
+executor.i: executor.c.i
+.PHONY : executor.i
+
+# target to preprocess a source file
+executor.c.i:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/executor.c.i
+.PHONY : executor.c.i
+
+executor.s: executor.c.s
+.PHONY : executor.s
+
+# target to generate assembly for a file
+executor.c.s:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/executor.c.s
+.PHONY : executor.c.s
+
+generate.o: generate.c.o
+.PHONY : generate.o
+
+# target to build an object file
+generate.c.o:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/generate.c.o
+.PHONY : generate.c.o
+
+generate.i: generate.c.i
+.PHONY : generate.i
+
+# target to preprocess a source file
+generate.c.i:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/generate.c.i
+.PHONY : generate.c.i
+
+generate.s: generate.c.s
+.PHONY : generate.s
+
+# target to generate assembly for a file
+generate.c.s:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/generate.c.s
+.PHONY : generate.c.s
+
+pipeline.o: pipeline.c.o
+.PHONY : pipeline.o
+
+# target to build an object file
+pipeline.c.o:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/pipeline.c.o
+.PHONY : pipeline.c.o
+
+pipeline.i: pipeline.c.i
+.PHONY : pipeline.i
+
+# target to preprocess a source file
+pipeline.c.i:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/pipeline.c.i
+.PHONY : pipeline.c.i
+
+pipeline.s: pipeline.c.s
+.PHONY : pipeline.s
+
+# target to generate assembly for a file
+pipeline.c.s:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/pipeline.c.s
+.PHONY : pipeline.c.s
+
 runtime.o: runtime.c.o
 .PHONY : runtime.o
 
@@ -267,6 +339,30 @@ runtime_test.c.s:
 	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/test_runtime.dir/build.make src/runtime/CMakeFiles/test_runtime.dir/runtime_test.c.s
 .PHONY : runtime_test.c.s
 
+session.o: session.c.o
+.PHONY : session.o
+
+# target to build an object file
+session.c.o:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/session.c.o
+.PHONY : session.c.o
+
+session.i: session.c.i
+.PHONY : session.i
+
+# target to preprocess a source file
+session.c.i:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/session.c.i
+.PHONY : session.c.i
+
+session.s: session.c.s
+.PHONY : session.s
+
+# target to generate assembly for a file
+session.c.s:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/runtime/CMakeFiles/hb_runtime.dir/build.make src/runtime/CMakeFiles/hb_runtime.dir/session.c.s
+.PHONY : session.c.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -284,12 +380,24 @@ help:
 	@echo "... test"
 	@echo "... hb_runtime"
 	@echo "... test_runtime"
+	@echo "... executor.o"
+	@echo "... executor.i"
+	@echo "... executor.s"
+	@echo "... generate.o"
+	@echo "... generate.i"
+	@echo "... generate.s"
+	@echo "... pipeline.o"
+	@echo "... pipeline.i"
+	@echo "... pipeline.s"
 	@echo "... runtime.o"
 	@echo "... runtime.i"
 	@echo "... runtime.s"
 	@echo "... runtime_test.o"
 	@echo "... runtime_test.i"
 	@echo "... runtime_test.s"
+	@echo "... session.o"
+	@echo "... session.i"
+	@echo "... session.s"
 .PHONY : help
 
 

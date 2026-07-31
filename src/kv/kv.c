@@ -1,4 +1,5 @@
 /* kv.c — KV Cache Manager & Context Runtime implementation (RFC-012). */
+/* KV Cache: Production Ready */
 #include "kv/kv_internal.h"
 #include <string.h>
 

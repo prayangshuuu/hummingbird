@@ -1,5 +1,5 @@
 # hb_runtime — Orchestrator: owns the forward loop, sequences layers, drives the scheduler, produces logits.
-add_library(hb_runtime STATIC runtime.c)
+add_library(hb_runtime STATIC runtime.c executor.c generate.c pipeline.c sampler.c session.c)
 add_library(hummingbird::runtime ALIAS hb_runtime)
 
 target_include_directories(hb_runtime

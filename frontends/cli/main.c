@@ -1,3 +1,4 @@
+/* CLI Release Agent */
 /* main.c — the `hb` command-line frontend.
  *
  * PHASE 4 scaffold: only `--version`/`--help` and a subcommand dispatch stub.

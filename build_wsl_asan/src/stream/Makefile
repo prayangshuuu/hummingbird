@@ -219,6 +219,102 @@ test_stream/fast:
 	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/test_stream.dir/build.make src/stream/CMakeFiles/test_stream.dir/build
 .PHONY : test_stream/fast
 
+cache.o: cache.c.o
+.PHONY : cache.o
+
+# target to build an object file
+cache.c.o:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/cache.c.o
+.PHONY : cache.c.o
+
+cache.i: cache.c.i
+.PHONY : cache.i
+
+# target to preprocess a source file
+cache.c.i:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/cache.c.i
+.PHONY : cache.c.i
+
+cache.s: cache.c.s
+.PHONY : cache.s
+
+# target to generate assembly for a file
+cache.c.s:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/cache.c.s
+.PHONY : cache.c.s
+
+memory.o: memory.c.o
+.PHONY : memory.o
+
+# target to build an object file
+memory.c.o:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/memory.c.o
+.PHONY : memory.c.o
+
+memory.i: memory.c.i
+.PHONY : memory.i
+
+# target to preprocess a source file
+memory.c.i:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/memory.c.i
+.PHONY : memory.c.i
+
+memory.s: memory.c.s
+.PHONY : memory.s
+
+# target to generate assembly for a file
+memory.c.s:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/memory.c.s
+.PHONY : memory.c.s
+
+prefetch.o: prefetch.c.o
+.PHONY : prefetch.o
+
+# target to build an object file
+prefetch.c.o:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/prefetch.c.o
+.PHONY : prefetch.c.o
+
+prefetch.i: prefetch.c.i
+.PHONY : prefetch.i
+
+# target to preprocess a source file
+prefetch.c.i:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/prefetch.c.i
+.PHONY : prefetch.c.i
+
+prefetch.s: prefetch.c.s
+.PHONY : prefetch.s
+
+# target to generate assembly for a file
+prefetch.c.s:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/prefetch.c.s
+.PHONY : prefetch.c.s
+
+scheduler.o: scheduler.c.o
+.PHONY : scheduler.o
+
+# target to build an object file
+scheduler.c.o:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/scheduler.c.o
+.PHONY : scheduler.c.o
+
+scheduler.i: scheduler.c.i
+.PHONY : scheduler.i
+
+# target to preprocess a source file
+scheduler.c.i:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/scheduler.c.i
+.PHONY : scheduler.c.i
+
+scheduler.s: scheduler.c.s
+.PHONY : scheduler.s
+
+# target to generate assembly for a file
+scheduler.c.s:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/scheduler.c.s
+.PHONY : scheduler.c.s
+
 stream.o: stream.c.o
 .PHONY : stream.o
 
@@ -267,6 +363,30 @@ stream_test.c.s:
 	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/test_stream.dir/build.make src/stream/CMakeFiles/test_stream.dir/stream_test.c.s
 .PHONY : stream_test.c.s
 
+tracker.o: tracker.c.o
+.PHONY : tracker.o
+
+# target to build an object file
+tracker.c.o:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/tracker.c.o
+.PHONY : tracker.c.o
+
+tracker.i: tracker.c.i
+.PHONY : tracker.i
+
+# target to preprocess a source file
+tracker.c.i:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/tracker.c.i
+.PHONY : tracker.c.i
+
+tracker.s: tracker.c.s
+.PHONY : tracker.s
+
+# target to generate assembly for a file
+tracker.c.s:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/stream/CMakeFiles/hb_stream.dir/build.make src/stream/CMakeFiles/hb_stream.dir/tracker.c.s
+.PHONY : tracker.c.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -284,12 +404,27 @@ help:
 	@echo "... test"
 	@echo "... hb_stream"
 	@echo "... test_stream"
+	@echo "... cache.o"
+	@echo "... cache.i"
+	@echo "... cache.s"
+	@echo "... memory.o"
+	@echo "... memory.i"
+	@echo "... memory.s"
+	@echo "... prefetch.o"
+	@echo "... prefetch.i"
+	@echo "... prefetch.s"
+	@echo "... scheduler.o"
+	@echo "... scheduler.i"
+	@echo "... scheduler.s"
 	@echo "... stream.o"
 	@echo "... stream.i"
 	@echo "... stream.s"
 	@echo "... stream_test.o"
 	@echo "... stream_test.i"
 	@echo "... stream_test.s"
+	@echo "... tracker.o"
+	@echo "... tracker.i"
+	@echo "... tracker.s"
 .PHONY : help
 
 

@@ -28,6 +28,7 @@ hbi_status hbi_memory_planner_create(const hbi_graph *graph, hbi_memory_planner 
     hbi_memory_planner *p = calloc(1, sizeof(*p));
     if (!p)
         return HBI_ERR_OOM;
+    memset(p, 0, sizeof(*p));
 
     p->graph = graph;
 

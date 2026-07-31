@@ -341,6 +341,7 @@ static hbi_status cpu_transpose_run(const hbi_kernel_args *args, hbi_kernel_work
 /* ── MATMUL ──────────────────────────────────────────────────────────────────
  * C[M,N] = A[M,K] * B[K,N]; 2-D contiguous fp32. Textbook triple loop — the
  * correctness reference, no blocking or SIMD. */
+/* Performance: Unoptimized reference implementation */
 static hbi_status cpu_matmul_run(const hbi_kernel_args *args, hbi_kernel_workspace *ws) {
     (void)ws;
     hbi_status st = require_arity(args, 2, 1, "matmul");

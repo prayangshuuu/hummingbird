@@ -51,7 +51,7 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
-Run the scaffold binaries to confirm everything links and executes:
+Run the binaries to confirm everything links and executes:
 
 ```sh
 ./build/frontends/cli/hb --version
@@ -60,7 +60,7 @@ Run the scaffold binaries to confirm everything links and executes:
 
 ## Usage & How to Run
 
-Once the frontends are built, you can use the `hb` CLI for inference and serving (note: inference is currently in development).
+Once the frontends are built, you can use the `hb` CLI for inference and serving (CPU inference is now fully functional).
 
 ```sh
 # One-shot text generation
@@ -102,18 +102,57 @@ The defining feature of Hummingbird is that SSD, RAM, and VRAM are treated as on
 2. **Learning Cache:** Repeated workloads keep the right weights warm. The engine gets faster the more it is used.
 3. **Coalesced Streaming:** Expert weights are read in one large sequential I/O and handed directly to kernels via zero-copy views.
 
+## Milestone Status
+
+| Milestone | Scope | Status |
+|-----------|-------|--------|
+| **M1** | Platform, memory, tensor, config, common | ✅ Complete |
+| **M2** | Kernel registry, thread pool, execution graph, scheduler | ✅ Complete |
+| **M3** | Runtime orchestrator, tokenizer framework, model adapter, KV cache, greedy sampler | ✅ Complete |
+| **M4** | Streaming engine (RFC-020), paged KV, SIMD kernels | 🔄 In Progress |
+| **M5** | CUDA backend, Metal backend | ⏳ Planned |
+
+## What's Implemented
+
+All layers 0–9 of the inference stack are built and passing tests:
+
+| Subsystem | Module | Notes |
+|-----------|--------|-------|
+| OS abstraction | `platform` | Threads, files, clocks, aligned alloc |
+| Error propagation | `common` | Thread-local error records, stable status codes |
+| Memory | `memory` | Arena allocator, debug canaries, tagged allocations |
+| Typed config | `config` | Schema-driven, precedence-aware loading |
+| Tensor | `tensor` | Shape, dtype, fp16/bf16/mxfp4 quant meta, view/slice |
+| Quantization | `quant` | fp16 · bf16 · mxfp4 → fp32 dequantization |
+| Kernel registry | `kernel` | Op taxonomy, pluggable dispatch table |
+| CPU backend | `backends/cpu` | Scalar reference — correctness baseline |
+| Thread pool | `threadpool` | Work-stealing, fully tested |
+| Execution graph | `graph` | Builder + finalized graph |
+| Scheduler | `scheduler` | Topological stage compiler |
+| KV cache | `kv` | Contiguous allocator, paged interface defined (RFC-012) |
+| Tokenizer | `tokenizer` | UTF-8 · vocab hash · vtable registry (RFC-017) |
+| Model loader | `model` | Format detection, manifest, Safetensors parser |
+| Adapter | `adapter` | Model family → graph mapping; GPT-OSS adapter shipped |
+| Runtime orchestrator | `runtime` | Prefill + decode loop, greedy sampler, cancellation (RFC-019) |
+| Streaming scaffold | `stream` | Interfaces defined; `io_uring` integration pending (RFC-020) |
+| Structured logging | `logging` | Leveled, pluggable sinks |
+| Profiler | `profiler` | Lightweight instrumentation hooks |
+
 ## Upcoming Features
 
-* **KV Cache Manager**: Paged memory allocator specifically for KV tensors.
-* **Model Loader**: Serialization/Deserialization parser for Safetensors & GGUF.
-* **GPU Backend Interface**: Unified abstractions for loading `.so/.dll` for CUDA and Metal at runtime.
-* **Dynamic Batching**: Server-grade continuous batching for maximum throughput.
-* **Streaming Engine**: Coalesced I/O via `io_uring` and memory-mapped IO.
+* **Streaming Engine** (M4): Coalesced I/O via `io_uring` (Linux) / IOCP (Windows) + prefetch node injection into the execution graph so I/O latency hides behind compute.
+* **Paged KV Cache** (M4): Re-architect the contiguous KV blocks into dynamic pages for long-context and batched inference.
+* **SIMD Kernels** (M4): AVX2/AVX-512 optimized matrix-multiply to replace the scalar CPU fallback.
+* **Model Loader — GGUF** (M4): Extend the format-handler registry with a GGUF parser alongside Safetensors.
+* **Dynamic Batching** (M5): Server-grade continuous batching for maximum throughput.
+* **CUDA Backend** (M5): Full kernel implementations for NVIDIA GPUs.
+* **Metal Backend** (M5): Apple Silicon acceleration via the Metal compute pipeline.
 
 ## Embedding Hummingbird
 
 Because the engine is a library with a stable C ABI, you can easily embed it directly into another application.
 
+**Version query:**
 ```c
 #include <hummingbird/hummingbird.h>
 #include <stdio.h>
@@ -129,6 +168,50 @@ int main(void) {
     return 0;
 }
 ```
+
+**Running a generation session (streaming token callback):**
+```c
+#include <hummingbird/hummingbird.h>
+#include <stdio.h>
+
+static void on_token(const char *text, void *ud) {
+    (void)ud;
+    fputs(text, stdout);
+    fflush(stdout);
+}
+
+int main(void) {
+    hbi_allocator      *alloc   = hbi_allocator_default();
+    hbi_load_session   *model   = NULL; /* load via hbi_model_load() */
+    hbi_model_adapter  *adapter = NULL; /* e.g. hbi_adapter_gpt_oss_register() */
+    hbi_tokenizer_manager *tok  = NULL; /* register a tokenizer first */
+
+    hbi_runtime_config cfg = {
+        .greedy         = true,
+        .max_new_tokens = 256,
+        .eos_token_id   = 2,
+    };
+
+    hbi_runtime_session *session = NULL;
+    hbi_runtime_session_create(model, adapter, tok, &cfg, alloc, &session);
+
+    /* Streams decoded text token-by-token into on_token() */
+    hbi_runtime_generate(session, "Explain KV caching in one paragraph:",
+                         on_token, NULL);
+
+    hbi_runtime_session_destroy(session);
+    return 0;
+}
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, module dependency rules, coding style, test requirements, and the PR checklist.
+
+Quick links:
+- [Architecture docs](docs/architecture/) — numbered 01–13, covers the full dependency graph
+- [RFCs](docs/rfcs/) — active and historical design documents
+- [Roadmap](docs/ROADMAP.md) — milestone plan
 
 ## License
 

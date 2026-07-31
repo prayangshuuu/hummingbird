@@ -1128,6 +1128,19 @@ test_adapter/fast:
 .PHONY : test_adapter/fast
 
 #=============================================================================
+# Target rules for targets named test_adapter_gpt_oss
+
+# Build rule for target.
+test_adapter_gpt_oss: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_adapter_gpt_oss
+.PHONY : test_adapter_gpt_oss
+
+# fast build rule for target.
+test_adapter_gpt_oss/fast:
+	$(MAKE) $(MAKESILENT) -f src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/build.make src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/build
+.PHONY : test_adapter_gpt_oss/fast
+
+#=============================================================================
 # Target rules for targets named hb_executor
 
 # Build rule for target.
@@ -1436,6 +1449,7 @@ help:
 	@echo "... hb_toolinfo"
 	@echo "... hummingbird"
 	@echo "... test_adapter"
+	@echo "... test_adapter_gpt_oss"
 	@echo "... test_backend"
 	@echo "... test_backend_cpu"
 	@echo "... test_backend_cpu_kernels"

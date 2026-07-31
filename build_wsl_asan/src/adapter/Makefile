@@ -219,6 +219,20 @@ test_adapter/fast:
 	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/adapter/CMakeFiles/test_adapter.dir/build.make src/adapter/CMakeFiles/test_adapter.dir/build
 .PHONY : test_adapter/fast
 
+# Convenience name for target.
+src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/rule:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/rule
+.PHONY : src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/rule
+
+# Convenience name for target.
+test_adapter_gpt_oss: src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/rule
+.PHONY : test_adapter_gpt_oss
+
+# fast build rule for target.
+test_adapter_gpt_oss/fast:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/build.make src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/build
+.PHONY : test_adapter_gpt_oss/fast
+
 adapter.o: adapter.c.o
 .PHONY : adapter.o
 
@@ -242,6 +256,54 @@ adapter.s: adapter.c.s
 adapter.c.s:
 	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/adapter/CMakeFiles/hb_adapter.dir/build.make src/adapter/CMakeFiles/hb_adapter.dir/adapter.c.s
 .PHONY : adapter.c.s
+
+adapter_gpt_oss.o: adapter_gpt_oss.c.o
+.PHONY : adapter_gpt_oss.o
+
+# target to build an object file
+adapter_gpt_oss.c.o:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/adapter/CMakeFiles/hb_adapter.dir/build.make src/adapter/CMakeFiles/hb_adapter.dir/adapter_gpt_oss.c.o
+.PHONY : adapter_gpt_oss.c.o
+
+adapter_gpt_oss.i: adapter_gpt_oss.c.i
+.PHONY : adapter_gpt_oss.i
+
+# target to preprocess a source file
+adapter_gpt_oss.c.i:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/adapter/CMakeFiles/hb_adapter.dir/build.make src/adapter/CMakeFiles/hb_adapter.dir/adapter_gpt_oss.c.i
+.PHONY : adapter_gpt_oss.c.i
+
+adapter_gpt_oss.s: adapter_gpt_oss.c.s
+.PHONY : adapter_gpt_oss.s
+
+# target to generate assembly for a file
+adapter_gpt_oss.c.s:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/adapter/CMakeFiles/hb_adapter.dir/build.make src/adapter/CMakeFiles/hb_adapter.dir/adapter_gpt_oss.c.s
+.PHONY : adapter_gpt_oss.c.s
+
+adapter_gpt_oss_test.o: adapter_gpt_oss_test.c.o
+.PHONY : adapter_gpt_oss_test.o
+
+# target to build an object file
+adapter_gpt_oss_test.c.o:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/build.make src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/adapter_gpt_oss_test.c.o
+.PHONY : adapter_gpt_oss_test.c.o
+
+adapter_gpt_oss_test.i: adapter_gpt_oss_test.c.i
+.PHONY : adapter_gpt_oss_test.i
+
+# target to preprocess a source file
+adapter_gpt_oss_test.c.i:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/build.make src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/adapter_gpt_oss_test.c.i
+.PHONY : adapter_gpt_oss_test.c.i
+
+adapter_gpt_oss_test.s: adapter_gpt_oss_test.c.s
+.PHONY : adapter_gpt_oss_test.s
+
+# target to generate assembly for a file
+adapter_gpt_oss_test.c.s:
+	cd /mnt/c/Users/praya/OneDrive/Documents/Project/Hummingbird/build_wsl_asan && $(MAKE) $(MAKESILENT) -f src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/build.make src/adapter/CMakeFiles/test_adapter_gpt_oss.dir/adapter_gpt_oss_test.c.s
+.PHONY : adapter_gpt_oss_test.c.s
 
 adapter_mock.o: adapter_mock.c.o
 .PHONY : adapter_mock.o
@@ -308,9 +370,16 @@ help:
 	@echo "... test"
 	@echo "... hb_adapter"
 	@echo "... test_adapter"
+	@echo "... test_adapter_gpt_oss"
 	@echo "... adapter.o"
 	@echo "... adapter.i"
 	@echo "... adapter.s"
+	@echo "... adapter_gpt_oss.o"
+	@echo "... adapter_gpt_oss.i"
+	@echo "... adapter_gpt_oss.s"
+	@echo "... adapter_gpt_oss_test.o"
+	@echo "... adapter_gpt_oss_test.i"
+	@echo "... adapter_gpt_oss_test.s"
 	@echo "... adapter_mock.o"
 	@echo "... adapter_mock.i"
 	@echo "... adapter_mock.s"

@@ -1,0 +1,2 @@
+- Frontend main functions report unimplemented features by returning `(int)HB_ERR_NOT_IMPLEMENTED` rather than asserting or aborting, keeping error semantics consistent with the library's `hb_status` contract.
+- Version display goes through `hb_version_string()` (and `hb_version()` for the CLI) instead of hard-coded constants, so the binary stays in sync with the library ABI.

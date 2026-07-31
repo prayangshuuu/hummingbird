@@ -105,7 +105,9 @@ static hbi_status infer_output_shape(hbi_kernel_op op, const hbi_kernel_params *
     } else if (op == HBI_KERNEL_OP_FILL) {
         if (num_inputs != 0)
             return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "requires 0 inputs");
-        return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "fill shape cannot be inferred from inputs");
+        out_shape->rank = 1;
+        out_shape->dims[0] = 1;
+        *out_dtype = HBI_DTYPE_FP32;
     } else if (op == HBI_KERNEL_OP_ELEMENTWISE) {
         if (num_inputs != 2)
             return HBI_ERR_SET(HBI_ERR_INVALID_ARG, 0, "requires 2 inputs");
