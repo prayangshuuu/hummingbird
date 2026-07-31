@@ -134,13 +134,13 @@ All layers 0–9 of the inference stack are built and passing tests:
 | Model loader | `model` | Format detection, manifest, Safetensors parser |
 | Adapter | `adapter` | Model family → graph mapping; GPT-OSS adapter shipped |
 | Runtime orchestrator | `runtime` | Prefill + decode loop, greedy sampler, cancellation (RFC-019) |
-| Streaming scaffold | `stream` | Interfaces defined; `io_uring` integration pending (RFC-020) |
+| Streaming engine | `stream` | Core streaming cache eviction and memory budget tracking (RFC-020) |
 | Structured logging | `logging` | Leveled, pluggable sinks |
 | Profiler | `profiler` | Lightweight instrumentation hooks |
 
 ## Upcoming Features
 
-* **Streaming Engine** (M4): Coalesced I/O via `io_uring` (Linux) / IOCP (Windows) + prefetch node injection into the execution graph so I/O latency hides behind compute.
+* **Streaming Engine** (M4): Coalesced I/O via `io_uring` (Linux) / IOCP (Windows) + unified execution planner (RFC-020 Phase 2).
 * **Paged KV Cache** (M4): Re-architect the contiguous KV blocks into dynamic pages for long-context and batched inference.
 * **SIMD Kernels** (M4): AVX2/AVX-512 optimized matrix-multiply to replace the scalar CPU fallback.
 * **Model Loader — GGUF** (M4): Extend the format-handler registry with a GGUF parser alongside Safetensors.
