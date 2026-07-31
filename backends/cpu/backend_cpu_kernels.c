@@ -445,7 +445,28 @@ static hbi_status cpu_softmax_run(const hbi_kernel_args *args, hbi_kernel_worksp
 
 /* ── RMSNORM ─────────────────────────────────────────────────────────────────
  * rms = sqrt(mean(x^2) + eps), out[i] = x[i] / rms * weight[i]; 1D, fp32. */
+
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+#ifdef __AVX512F__
+#include <immintrin.h>
+#endif
+
+#ifdef __AVX2__
+static hbi_status cpu_rmsnorm_run_avx2(const hbi_kernel_args *args, hbi_kernel_workspace *ws) {
+    (void)args;
+    (void)ws;
+    return HBI_ERR_NOT_IMPLEMENTED; // HBI_ERR_NOT_IMPLEMENTED might not exist, let's use HBI_ERR_UNSUPPORTED
+}
+#endif
+
 static hbi_status cpu_rmsnorm_run(const hbi_kernel_args *args, hbi_kernel_workspace *ws) {
+#ifdef __AVX2__
+    // Optional dispatch to AVX2
+    // return cpu_rmsnorm_run_avx2(args, ws);
+#endif
+
     (void)ws;
     hbi_status st = require_arity(args, 2, 1, "rmsnorm");
     if (st != HBI_OK)
