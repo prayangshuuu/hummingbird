@@ -1,256 +1,206 @@
+#include "memory/memory.h"
+#include "model/model.h"
 #include "platform/platform.h"
 #include "stream/stream.h"
+#include "stream/stream_internal.h"
+#include "tensor/tensor.h"
+#include "threadpool/threadpool.h"
 #include <stdlib.h>
-#include <string.h>
 
-#define INITIAL_CAPACITY 4096
+void hbi_stream_io_worker_read(void *arg) {
+    // Note: In a real threadpool, this would receive the block or a job context.
+    // We assume arg is a pointer to an array containing [engine, block] or we retrieve engine
+    // globally. For this prototype, we'll assume arg points to block, but we need engine for
+    // budgets. Let's modify the signature or use a global. Wait, we can't change signature without
+    // breaking. I will redefine the job structure to pass engine as well. Actually, I can store
+    // engine pointer inside the block temporarily or create a struct. Let's assume hbi_stream_block
+    // has a pointer to its parent engine, or we pass a wrapper. For now, I will modify the
+    // threadpool submit in prefetch to pass a custom struct.
 
-typedef struct lru_node {
-    hbi_block_id_t id;
-    struct lru_node *prev;
-    struct lru_node *next;
-} lru_node_t;
-
-typedef struct hash_entry {
-    hbi_block_id_t id;
-    lru_node_t *node;
-    bool occupied;
-} hash_entry_t;
-
-struct hbi_cache_manager_t {
-    hbi_cache_policy_t policy;
-    size_t capacity;
-    size_t count;
-    lru_node_t *head;
-    lru_node_t *tail;
-
-    hbi_mutex *mutex;
-
-    hash_entry_t *table;
-    size_t table_capacity;
-};
-
-static size_t hash_id(hbi_block_id_t id) {
-    size_t h = (size_t)id;
-    h ^= h >> 33;
-    h *= 0xff51afd7ed558ccdULL;
-    h ^= h >> 33;
-    h *= 0xc4ceb9fe1a85ec53ULL;
-    h ^= h >> 33;
-    return h;
-}
-
-hbi_cache_manager_t *hbi_cache_manager_create(hbi_cache_policy_t policy, size_t capacity) {
-    hbi_cache_manager_t *cache = calloc(1, sizeof(hbi_cache_manager_t));
-    if (!cache)
-        return NULL;
-
-    if (hbi_mutex_init(&cache->mutex) != HBI_OK) {
-        free(cache);
-        return NULL;
-    }
-
-    cache->policy = policy;
-    cache->capacity = capacity;
-    cache->table_capacity = INITIAL_CAPACITY;
-    while (cache->table_capacity < capacity * 2) {
-        cache->table_capacity *= 2;
-    }
-
-    cache->table = calloc(cache->table_capacity, sizeof(hash_entry_t));
-    if (!cache->table) {
-        hbi_mutex_destroy(cache->mutex);
-        free(cache);
-        return NULL;
-    }
-
-    return cache;
-}
-
-void hbi_cache_manager_destroy(hbi_cache_manager_t *cache) {
-    if (!cache)
+    hbi_stream_block *block = (hbi_stream_block *)arg;
+    if (!block || !block->engine)
         return;
 
-    lru_node_t *curr = cache->head;
-    while (curr) {
-        lru_node_t *next = curr->next;
-        free(curr);
-        curr = next;
-    }
+    hbi_stream_engine *engine = block->engine;
 
-    hbi_mutex_destroy(cache->mutex);
-    free(cache->table);
-    free(cache);
-}
+    if (!block->ram_ptr) {
+        size_t needed_size = block->entry->byte_size;
 
-// Assumes mutex is held
-static int find_hash_slot(hbi_cache_manager_t *cache, hbi_block_id_t id) {
-    size_t mask = cache->table_capacity - 1;
-    size_t idx = hash_id(id) & mask;
+        hbi_mutex_lock(engine->global_mutex);
 
-    for (size_t i = 0; i < cache->table_capacity; i++) {
-        if (!cache->table[idx].occupied) {
-            return -1;
-        }
-        if (cache->table[idx].id == id) {
-            return (int)idx;
-        }
-        idx = (idx + 1) & mask;
-    }
-    return -1;
-}
-
-// Assumes mutex is held
-static bool resize_table(hbi_cache_manager_t *cache) {
-    size_t new_cap = cache->table_capacity * 2;
-    hash_entry_t *new_table = calloc(new_cap, sizeof(hash_entry_t));
-    if (!new_table)
-        return false;
-
-    size_t mask = new_cap - 1;
-    for (size_t i = 0; i < cache->table_capacity; i++) {
-        if (cache->table[i].occupied) {
-            size_t idx = hash_id(cache->table[i].id) & mask;
-            while (new_table[idx].occupied) {
-                idx = (idx + 1) & mask;
+        while (engine->ram_usage + needed_size > engine->ram_capacity) {
+            if (hbi_stream_evict_lru(engine, needed_size, HB_TIER_RAM) != HBI_OK) {
+                break; // Not enough memory, eviction failed
             }
-            new_table[idx] = cache->table[i];
         }
-    }
 
-    free(cache->table);
-    cache->table = new_table;
-    cache->table_capacity = new_cap;
-    return true;
-}
-
-// Assumes mutex is held
-static void move_to_front(hbi_cache_manager_t *cache, lru_node_t *node) {
-    if (cache->head == node)
-        return;
-    if (node->prev)
-        node->prev->next = node->next;
-    if (node->next)
-        node->next->prev = node->prev;
-    if (cache->tail == node)
-        cache->tail = node->prev;
-
-    node->next = cache->head;
-    node->prev = NULL;
-    if (cache->head)
-        cache->head->prev = node;
-    cache->head = node;
-    if (!cache->tail)
-        cache->tail = node;
-}
-
-bool hbi_cache_manager_access(hbi_cache_manager_t *cache, hbi_block_id_t id) {
-    if (!cache)
-        return false;
-    hbi_mutex_lock(cache->mutex);
-
-    int slot = find_hash_slot(cache, id);
-    if (slot >= 0) {
-        move_to_front(cache, cache->table[slot].node);
-        hbi_mutex_unlock(cache->mutex);
-        return true;
-    }
-
-    hbi_mutex_unlock(cache->mutex);
-    return false;
-}
-
-void hbi_cache_manager_insert(hbi_cache_manager_t *cache, hbi_block_id_t id) {
-    if (!cache)
-        return;
-    hbi_mutex_lock(cache->mutex);
-
-    if (find_hash_slot(cache, id) >= 0) {
-        hbi_mutex_unlock(cache->mutex);
-        return;
-    }
-
-    if (cache->count >= cache->table_capacity / 2) {
-        if (!resize_table(cache)) {
-            hbi_mutex_unlock(cache->mutex);
-            return;
+        block->ram_ptr = hbi_alloc(hbi_allocator_system(), needed_size,
+                                   block->entry->required_alignment, HBI_MEM_WEIGHTS);
+        if (block->ram_ptr) {
+            engine->ram_usage += needed_size;
+            engine->stats.disk_bytes_read += needed_size;
         }
+
+        hbi_mutex_unlock(engine->global_mutex);
     }
 
-    lru_node_t *node = malloc(sizeof(lru_node_t));
-    if (!node) {
-        hbi_mutex_unlock(cache->mutex);
-        return;
-    }
-    node->id = id;
-    node->next = NULL;
-    node->prev = NULL;
-
-    move_to_front(cache, node);
-    cache->count++;
-
-    size_t mask = cache->table_capacity - 1;
-    size_t idx = hash_id(id) & mask;
-    while (cache->table[idx].occupied) {
-        idx = (idx + 1) & mask;
+    if (block->ram_ptr && block->handler && block->handler->read_tensor_data) {
+        block->handler->read_tensor_data(block->file_path, block->entry, block->ram_ptr,
+                                         block->entry->byte_size);
     }
 
-    cache->table[idx].id = id;
-    cache->table[idx].node = node;
-    cache->table[idx].occupied = true;
-
-    hbi_mutex_unlock(cache->mutex);
+    hbi_mutex_lock(block->mutex);
+    block->status = HB_RESIDENCY_RESIDENT;
+    hbi_cond_broadcast(block->cond);
+    hbi_mutex_unlock(block->mutex);
 }
 
-bool hbi_cache_manager_evict(hbi_cache_manager_t *cache, hbi_block_id_t *evicted_id) {
-    if (!cache)
-        return false;
-    hbi_mutex_lock(cache->mutex);
+hbi_status hbi_stream_cache_record_access(hbi_stream_engine *engine, hbi_stream_block *block) {
+    if (!engine || !block)
+        return HBI_ERR_INVALID_ARG;
 
-    if (cache->count == 0) {
-        hbi_mutex_unlock(cache->mutex);
-        return false;
-    }
+    hbi_mutex_lock(block->mutex);
+    block->access_count++;
+    block->last_access_tick = hbi_time_monotonic_ns();
+    hbi_mutex_unlock(block->mutex);
 
-    lru_node_t *node = cache->tail;
-    if (!node) {
-        hbi_mutex_unlock(cache->mutex);
-        return false;
-    }
+    return HBI_OK;
+}
 
-    hbi_block_id_t id = node->id;
-    if (evicted_id)
-        *evicted_id = id;
+hbi_status hbi_stream_evict_lru(hbi_stream_engine *engine, size_t needed_size,
+                                hbi_memory_tier_t tier) {
+    if (!engine)
+        return HBI_ERR_INVALID_ARG;
+    (void)needed_size;
 
-    if (node->prev)
-        node->prev->next = NULL;
-    cache->tail = node->prev;
-    if (cache->head == node)
-        cache->head = NULL;
+    hbi_stream_block *lru_block = NULL;
+    uint64_t oldest_tick = UINT64_MAX;
 
-    // Remove from hash table
-    int slot = find_hash_slot(cache, id);
-    if (slot >= 0) {
-        cache->table[slot].occupied = false;
+    for (size_t i = 0; i < engine->num_blocks; ++i) {
+        hbi_stream_block *b = engine->blocks[i];
 
-        // Rehash chain
-        size_t mask = cache->table_capacity - 1;
-        size_t i = ((size_t)slot + 1) & mask;
-        while (cache->table[i].occupied) {
-            hash_entry_t entry = cache->table[i];
-            cache->table[i].occupied = false;
-
-            size_t new_idx = hash_id(entry.id) & mask;
-            while (cache->table[new_idx].occupied) {
-                new_idx = (new_idx + 1) & mask;
+        if (hbi_mutex_trylock(b->mutex) == HBI_OK) {
+            if (b->status == HB_RESIDENCY_RESIDENT && b->pin_count == 0 &&
+                b->current_tier == tier) {
+                if (b->last_access_tick < oldest_tick) {
+                    oldest_tick = b->last_access_tick;
+                    lru_block = b;
+                }
             }
-            cache->table[new_idx] = entry;
-            i = (i + 1) & mask;
+            hbi_mutex_unlock(b->mutex);
         }
     }
 
-    free(node);
-    cache->count--;
-    hbi_mutex_unlock(cache->mutex);
-    return true;
+    if (!lru_block) {
+        return HBI_ERR_OOM; // No evictable blocks found
+    }
+
+    // Perform eviction
+    hbi_mutex_lock(lru_block->mutex);
+    if (lru_block->status == HB_RESIDENCY_RESIDENT && lru_block->pin_count == 0) {
+        if (lru_block->ram_ptr) {
+            hbi_free(hbi_allocator_system(), lru_block->ram_ptr);
+            lru_block->ram_ptr = NULL;
+            engine->ram_usage -= lru_block->entry->byte_size;
+        }
+        lru_block->status = HB_RESIDENCY_EVICTED;
+        engine->stats.evictions++;
+    }
+    hbi_mutex_unlock(lru_block->mutex);
+
+    return HBI_OK;
+}
+
+hbi_status hbi_stream_prefetch(hbi_stream_engine *engine, hbi_stream_block *block,
+                               hbi_memory_tier_t target_tier) {
+    if (!engine || !block)
+        return HBI_ERR_INVALID_ARG;
+
+    hbi_mutex_lock(block->mutex);
+    if (block->status == HB_RESIDENCY_EVICTED) {
+        block->status = HB_RESIDENCY_IN_TRANSIT;
+        block->current_tier = target_tier;
+        hbi_threadpool_submit(engine->io_pool, hbi_stream_io_worker_read, block);
+    }
+    hbi_mutex_unlock(block->mutex);
+
+    return HBI_OK;
+}
+
+hbi_status hbi_stream_await(hbi_stream_engine *engine, hbi_stream_block *block,
+                            hbi_memory_tier_t target_tier, hbi_tensor *out_tensor) {
+    if (!engine || !block || !out_tensor)
+        return HBI_ERR_INVALID_ARG;
+    (void)target_tier;
+
+    hbi_mutex_lock(block->mutex);
+    while (block->status == HB_RESIDENCY_IN_TRANSIT) {
+        hbi_cond_wait(block->cond, block->mutex);
+    }
+
+    if (block->status == HB_RESIDENCY_EVICTED) {
+        hbi_mutex_unlock(block->mutex);
+        return HBI_ERR_STATE;
+    }
+
+    hbi_stream_cache_record_access(engine, block);
+    hbi_status status = hbi_tensor_wrap(out_tensor, block->dtype, &block->shape, block->ram_ptr,
+                                        block->entry->byte_size);
+
+    hbi_mutex_unlock(block->mutex);
+
+    if (status == HBI_OK) {
+        hbi_mutex_lock(engine->global_mutex);
+        engine->stats.cache_hits++;
+        hbi_mutex_unlock(engine->global_mutex);
+    }
+
+    return status;
+}
+
+hbi_status hbi_stream_pin(hbi_stream_engine *engine, hbi_stream_block *block) {
+    if (!engine || !block)
+        return HBI_ERR_INVALID_ARG;
+
+    hbi_mutex_lock(block->mutex);
+    if (block->status == HB_RESIDENCY_RESIDENT) {
+        block->status = HB_RESIDENCY_PINNED;
+    }
+    block->pin_count++;
+    hbi_mutex_unlock(block->mutex);
+
+    return HBI_OK;
+}
+
+hbi_status hbi_stream_unpin(hbi_stream_engine *engine, hbi_stream_block *block) {
+    if (!engine || !block)
+        return HBI_ERR_INVALID_ARG;
+
+    hbi_mutex_lock(block->mutex);
+    if (block->pin_count > 0) {
+        block->pin_count--;
+        if (block->pin_count == 0 && block->status == HB_RESIDENCY_PINNED) {
+            block->status = HB_RESIDENCY_RESIDENT;
+        }
+    }
+    hbi_mutex_unlock(block->mutex);
+
+    return HBI_OK;
+}
+
+hbi_status hbi_stream_evict(hbi_stream_engine *engine, hbi_stream_block *block) {
+    if (!engine || !block)
+        return HBI_ERR_INVALID_ARG;
+
+    hbi_mutex_lock(block->mutex);
+    if (block->status == HB_RESIDENCY_RESIDENT && block->pin_count == 0) {
+        if (block->ram_ptr) {
+            hbi_free(hbi_allocator_system(), block->ram_ptr);
+            block->ram_ptr = NULL;
+        }
+        block->status = HB_RESIDENCY_EVICTED;
+    }
+    hbi_mutex_unlock(block->mutex);
+
+    return HBI_OK;
 }

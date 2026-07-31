@@ -27,6 +27,7 @@
 #include "runtime/executor.h"
 #include "executor/executor_internal.h"
 #include "kernel/kernel.h"
+#include "stream/stream.h"
 #include <stdlib.h>
 
 hbi_status hbi_runtime_executor_run(hbi_runtime_session *s) {
@@ -85,6 +86,23 @@ hbi_status hbi_runtime_executor_run(hbi_runtime_session *s) {
                 uint32_t val_id = task->node->outputs[j];
                 if (val_id < exec_ctx->num_values) {
                     outputs[j] = exec_ctx->values[val_id].tensor;
+                }
+            }
+
+            /* --- RFC-020 Stream Await --- */
+            /* Await each input tensor to ensure it is resident before kernel dispatch */
+            for (uint32_t j = 0; j < task->node->num_inputs && j < HBI_KERNEL_MAX_INPUTS; ++j) {
+                uint32_t val_id = task->node->inputs[j];
+                if (val_id < exec_ctx->num_values && inputs[j] != NULL) {
+                    hbi_stream_block *block = hbi_stream_get_block(s->stream_engine, val_id);
+                    if (block != NULL) {
+                        hbi_tensor *t = exec_ctx->values[val_id].tensor;
+                        hbi_status await_st =
+                            hbi_stream_await(s->stream_engine, block, HB_TIER_RAM, t);
+                        if (await_st != HBI_OK) {
+                            return await_st;
+                        }
+                    }
                 }
             }
 

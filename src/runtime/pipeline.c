@@ -30,6 +30,8 @@
 #include "runtime/pipeline.h"
 #include "planner/planner.h"
 #include "runtime/session.h"
+#include "stream/stream.h"
+#include <stdatomic.h>
 
 hbi_status hbi_runtime_pipeline_build(hbi_runtime_session *s) {
     if (!s) {
@@ -114,6 +116,30 @@ hbi_status hbi_runtime_pipeline_build(hbi_runtime_session *s) {
         return st;
     }
     s->plan_memory = plan_memory;
+
+    /* ── Extension Point: Streaming Engine (RFC-020) ────────────────────── */
+    /* Loop over the execution plan and prefetch tensors that will be used soon. */
+    if (s->stream_engine) {
+        for (uint32_t i = 0; i < s->plan->num_stages; ++i) {
+            /* Check for cancellation before scheduling prefetches */
+            if (atomic_load_explicit(&s->cancel_flag, memory_order_acquire)) {
+                break;
+            }
+
+            hbi_execution_stage *stage = &s->plan->stages[i];
+            for (uint32_t j = 0; j < stage->num_tasks; ++j) {
+                hbi_task *task = stage->tasks[j];
+                const hbi_node *node = task->node;
+                for (uint32_t k = 0; k < node->num_inputs; ++k) {
+                    uint32_t value_id = node->inputs[k];
+                    hbi_stream_block *block = hbi_stream_get_block(s->stream_engine, value_id);
+                    if (block) {
+                        hbi_stream_prefetch(s->stream_engine, block, HB_TIER_VRAM);
+                    }
+                }
+            }
+        }
+    }
 
     /* ── Step 3: create a backend manager ───────────────────────────────── */
 

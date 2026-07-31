@@ -2,6 +2,8 @@
 #define HB_STREAM_H
 
 #include "common/common.h"
+#include "tensor/tensor.h"
+#include "threadpool/threadpool.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -10,107 +12,100 @@
 extern "C" {
 #endif
 
+/* Human-readable module name. */
 const char *hbi_stream_name(void);
 hbi_status hbi_stream_selftest(void);
 
-// Memory Tiers
+// ── Memory Tiers ──
 typedef enum {
-    HB_TIER_0 = 0, // VRAM / Pin / Hot
-    HB_TIER_1 = 1, // RAM / Main Memory
-    HB_TIER_2 = 2, // NVMe / SSD / Disk
-    HB_TIER_3 = 3, // Remote / Cold / Archive
+    HB_TIER_VRAM = 0, // Tier 0: GPU VRAM / Accelerator Memory
+    HB_TIER_RAM = 1,  // Tier 1: Pinned RAM / Main Memory
+    HB_TIER_DISK = 2, // Tier 2: NVMe / SSD / Disk
     HB_TIER_COUNT
 } hbi_memory_tier_t;
 
-// Cache Policies
-typedef enum { HB_CACHE_POLICY_LRU, HB_CACHE_POLICY_LFU, HB_CACHE_POLICY_ARC } hbi_cache_policy_t;
-
-// Residency Status
+// ── Cache Policies ──
 typedef enum {
-    HB_RESIDENCY_EVICTED,
-    HB_RESIDENCY_IN_TRANSIT,
-    HB_RESIDENCY_RESIDENT,
-    HB_RESIDENCY_PINNED
+    HB_CACHE_POLICY_LRU,
+    HB_CACHE_POLICY_LFU,
+    HB_CACHE_POLICY_HYBRID
+} hbi_cache_policy_t;
+
+// ── Residency Status ──
+typedef enum {
+    HB_RESIDENCY_EVICTED,    // Not in RAM/VRAM
+    HB_RESIDENCY_IN_TRANSIT, // Being loaded/moved
+    HB_RESIDENCY_RESIDENT,   // Ready for use
+    HB_RESIDENCY_PINNED      // Locked in memory, cannot be evicted
 } hbi_residency_status_t;
 
-// Statistics and Tracking
+// ── Telemetry & Statistics ──
 typedef struct {
-    uint64_t hits;
-    uint64_t misses;
-    uint64_t promotions;
-    uint64_t demotions;
-    uint64_t bytes_transferred;
-    float temporal_locality_score;
-} hbi_locality_stats_t;
+    uint64_t disk_bytes_read;
+    uint64_t vram_bytes_uploaded;
+    uint64_t cache_hits;
+    uint64_t cache_misses;
+    uint64_t prefetch_hits;
+    uint64_t evictions;
+    uint64_t active_in_transit;
+} hbi_stream_stats_t;
 
-// Opaque handles
-typedef struct hbi_memory_manager_t hbi_memory_manager_t;
-typedef struct hbi_cache_manager_t hbi_cache_manager_t;
-typedef struct hbi_scheduler_t hbi_scheduler_t;
-typedef struct hbi_prefetch_engine_t hbi_prefetch_engine_t;
-typedef struct hbi_locality_tracker_t hbi_locality_tracker_t;
+// ── Opaque Handles ──
+typedef struct hbi_stream_engine hbi_stream_engine;
+typedef struct hbi_stream_block hbi_stream_block;
 
-typedef uint64_t hbi_block_id_t;
+// ── Block Description ──
+struct hbi_format_handler;
+struct hbi_tensor_entry;
 
-// Memory Manager
-hbi_memory_manager_t *hbi_memory_manager_create(size_t tier_capacities[HB_TIER_COUNT]);
-void hbi_memory_manager_destroy(hbi_memory_manager_t *mm);
-bool hbi_memory_manager_allocate(hbi_memory_manager_t *mm, hbi_block_id_t id, size_t size,
-                                 hbi_memory_tier_t tier);
-bool hbi_memory_manager_free(hbi_memory_manager_t *mm, hbi_block_id_t id);
-hbi_residency_status_t hbi_memory_manager_get_residency(hbi_memory_manager_t *mm,
-                                                        hbi_block_id_t id);
-bool hbi_memory_manager_move(hbi_memory_manager_t *mm, hbi_block_id_t id,
-                             hbi_memory_tier_t new_tier);
+typedef struct hbi_stream_block_desc {
+    uint32_t tensor_id;
+    const char *file_path;
+    const struct hbi_format_handler *handler;
+    const struct hbi_tensor_entry *entry;
+    hbi_dtype dtype;
+    hbi_shape shape;
+    hbi_residency_status_t initial_status;
+    hbi_memory_tier_t initial_tier;
+} hbi_stream_block_desc;
 
-// Cache Manager
-hbi_cache_manager_t *hbi_cache_manager_create(hbi_cache_policy_t policy, size_t capacity);
-void hbi_cache_manager_destroy(hbi_cache_manager_t *cache);
-bool hbi_cache_manager_access(hbi_cache_manager_t *cache, hbi_block_id_t id);
-void hbi_cache_manager_insert(hbi_cache_manager_t *cache, hbi_block_id_t id);
-bool hbi_cache_manager_evict(hbi_cache_manager_t *cache, hbi_block_id_t *evicted_id);
+// ── Engine Lifecycle ──
+hbi_status hbi_stream_engine_create(size_t ram_capacity, size_t vram_capacity,
+                                    hbi_cache_policy_t policy, hbi_threadpool *io_pool,
+                                    hbi_stream_engine **out_engine);
+void hbi_stream_engine_destroy(hbi_stream_engine *engine);
 
-// Stream Engine
-typedef struct hbi_stream_engine_t hbi_stream_engine_t;
+// ── Block Registration ──
+/* Register a tensor block with the streaming engine. Does not load it. */
+hbi_status hbi_stream_register_block(hbi_stream_engine *engine, const hbi_stream_block_desc *desc,
+                                     hbi_stream_block **out_block);
 
-hbi_stream_engine_t *hbi_stream_engine_create(size_t tier_capacities[HB_TIER_COUNT],
-                                              hbi_cache_policy_t policy, size_t cache_capacity);
-void hbi_stream_engine_destroy(hbi_stream_engine_t *engine);
-bool hbi_stream_engine_load(hbi_stream_engine_t *engine, hbi_block_id_t id, size_t size);
-bool hbi_stream_engine_unload(hbi_stream_engine_t *engine, hbi_block_id_t id);
-bool hbi_stream_engine_promote(hbi_stream_engine_t *engine, hbi_block_id_t id);
-bool hbi_stream_engine_demote(hbi_stream_engine_t *engine, hbi_block_id_t id);
+hbi_stream_block *hbi_stream_get_block(hbi_stream_engine *engine, uint32_t tensor_id);
 
-// Scheduler
-hbi_scheduler_t *hbi_scheduler_create(hbi_stream_engine_t *engine);
-void hbi_scheduler_destroy(hbi_scheduler_t *sched);
-bool hbi_scheduler_load(hbi_scheduler_t *sched, hbi_block_id_t id, size_t size);
-bool hbi_scheduler_unload(hbi_scheduler_t *sched, hbi_block_id_t id);
-bool hbi_scheduler_promote(hbi_scheduler_t *sched, hbi_block_id_t id);
-bool hbi_scheduler_demote(hbi_scheduler_t *sched, hbi_block_id_t id);
-bool hbi_scheduler_pin(hbi_scheduler_t *sched, hbi_block_id_t id);
-bool hbi_scheduler_unpin(hbi_scheduler_t *sched, hbi_block_id_t id);
-bool hbi_scheduler_prefetch(hbi_scheduler_t *sched, hbi_block_id_t id, size_t size);
-bool hbi_scheduler_evict(hbi_scheduler_t *sched, hbi_block_id_t id);
-void hbi_scheduler_invalidate(hbi_scheduler_t *sched, hbi_block_id_t id);
-void hbi_scheduler_sync(hbi_scheduler_t *sched);
+/* Get a registered block by tensor_id. Returns NULL if not found. */
+hbi_stream_block *hbi_stream_get_block(hbi_stream_engine *engine, uint32_t tensor_id);
 
-// Prefetch Engine
-hbi_prefetch_engine_t *hbi_prefetch_engine_create(hbi_scheduler_t *sched);
-void hbi_prefetch_engine_destroy(hbi_prefetch_engine_t *prefetch);
-void hbi_prefetch_engine_submit(hbi_prefetch_engine_t *prefetch, hbi_block_id_t *sequence,
-                                size_t count, size_t size_per_block);
+// ── Block Operations ──
+/* Request a block to be loaded asynchronously into the target tier. */
+hbi_status hbi_stream_prefetch(hbi_stream_engine *engine, hbi_stream_block *block,
+                               hbi_memory_tier_t target_tier);
 
-// Locality Tracker
-hbi_locality_tracker_t *hbi_locality_tracker_create(void);
-void hbi_locality_tracker_destroy(hbi_locality_tracker_t *tracker);
-void hbi_locality_tracker_record_hit(hbi_locality_tracker_t *tracker, hbi_block_id_t id);
-void hbi_locality_tracker_record_miss(hbi_locality_tracker_t *tracker, hbi_block_id_t id);
-void hbi_locality_tracker_record_transfer(hbi_locality_tracker_t *tracker, hbi_block_id_t id,
-                                          size_t bytes);
-void hbi_locality_tracker_record_promotion(hbi_locality_tracker_t *tracker, hbi_block_id_t id);
-void hbi_locality_tracker_record_demotion(hbi_locality_tracker_t *tracker, hbi_block_id_t id);
-hbi_locality_stats_t hbi_locality_tracker_get_stats(hbi_locality_tracker_t *tracker);
+/* Block the current thread until the block is fully resident in the target tier. Sets *out_tensor
+ * to point to the resident data. */
+hbi_status hbi_stream_await(hbi_stream_engine *engine, hbi_stream_block *block,
+                            hbi_memory_tier_t target_tier, hbi_tensor *out_tensor);
+
+/* Pin a block so it won't be evicted. */
+hbi_status hbi_stream_pin(hbi_stream_engine *engine, hbi_stream_block *block);
+
+/* Unpin a block. */
+hbi_status hbi_stream_unpin(hbi_stream_engine *engine, hbi_stream_block *block);
+
+/* Hint to evict the block from RAM/VRAM if space is needed. */
+hbi_status hbi_stream_evict(hbi_stream_engine *engine, hbi_stream_block *block);
+
+// ── Telemetry ──
+hbi_stream_stats_t hbi_stream_get_stats(hbi_stream_engine *engine);
 
 #ifdef __cplusplus
 }

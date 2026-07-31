@@ -51,6 +51,9 @@ typedef struct hbi_runtime_session {
     struct hbi_memory_plan *plan_memory;
     hbi_backend_manager *backend_mgr;
 
+    /* RFC-020 Stream Engine */
+    struct hbi_stream_engine *stream_engine;
+
     /* Execution state */
     struct hbi_exec_context *exec_ctx;
     uint32_t prefill_tokens;

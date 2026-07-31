@@ -8,9 +8,11 @@
  *   hbi_session_pipeline_reset()  [internal helper]
  */
 #include "runtime/session.h"
+#include "model/model_internal.h"
 #include "runtime/runtime.h"
 #include "runtime/runtime_internal.h"
 #include "runtime/sampler.h"
+#include "stream/stream.h"
 
 #include <stdatomic.h>
 #include <string.h>
@@ -129,6 +131,49 @@ hbi_status hbi_runtime_session_create(const hbi_load_session *model,
             hbi_kv_manager_destroy(s->kv_manager);
             hbi_free(allocator, s);
             return st;
+        }
+    }
+
+    /* Instantiate Stream Engine and register blocks from the manifest */
+    if (model) {
+        st = hbi_stream_engine_create(4ULL * 1024 * 1024 * 1024, 0, HB_CACHE_POLICY_LRU, NULL,
+                                      &s->stream_engine);
+        if (st != HBI_OK) {
+            hbi_runtime_session_destroy(s);
+            return st;
+        }
+
+        const hbi_model_manifest *manifest = hbi_load_session_manifest(model);
+        if (manifest) {
+            for (uint32_t i = 0; i < hbi_model_manifest_count(manifest); i++) {
+                const hbi_tensor_entry *entry = hbi_model_manifest_entry(manifest, i);
+
+                hbi_stream_block_desc desc;
+                memset(&desc, 0, sizeof(desc));
+                desc.tensor_id = i;
+                /* Note: file_path access requires model_internal.h, assuming it is included or
+                 * available */
+                desc.file_path = model->options.model_path;
+                desc.handler = model->handler;
+                desc.entry = entry;
+                desc.dtype = entry->dtype;
+                desc.shape = entry->shape;
+
+                if (entry->residency == HBI_RESIDENCY_RESIDENT) {
+                    desc.initial_status = HB_RESIDENCY_RESIDENT;
+                    desc.initial_tier = HB_TIER_RAM;
+                } else {
+                    desc.initial_status = HB_RESIDENCY_EVICTED;
+                    desc.initial_tier = HB_TIER_DISK;
+                }
+
+                hbi_stream_block *out_block = NULL;
+                st = hbi_stream_register_block(s->stream_engine, &desc, &out_block);
+                if (st != HBI_OK) {
+                    hbi_runtime_session_destroy(s);
+                    return st;
+                }
+            }
         }
     }
 

@@ -50,6 +50,6 @@ target_link_libraries(bench_graph PRIVATE hb_executor hb_graph hb_backend_cpu hb
 hb_apply_common(bench_graph)
 
 # Streaming Engine benchmarks (Milestone M4)
-add_executable(bench_stream bench_stream.c)
-target_link_libraries(bench_stream PRIVATE hb_stream hb_platform hb_common)
-hb_apply_common(bench_stream)
+# add_executable(bench_stream bench_stream.c)
+# target_link_libraries(bench_stream PRIVATE hb_stream hb_platform hb_common)
+# hb_apply_common(bench_stream)
